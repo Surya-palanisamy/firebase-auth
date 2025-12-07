@@ -1,82 +1,111 @@
-"use client"
-
-import { useTheme as useMuiTheme } from "@mui/material/styles"
-import L from "leaflet"
-import "leaflet-routing-machine"
-import "leaflet/dist/leaflet.css"
-import { AlertCircle, AlertTriangle, CheckCircle2, Users, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { MapContainer, Polygon, Popup, TileLayer, useMap } from "react-leaflet"
-import LoadingSpinner from "../components/LoadingSpinner"
-import { useAppContext } from "../context/AppContext"
-import { useTheme as useThemeContext } from "../context/ThemeContext"
+import { useTheme } from "@mui/material/styles";
+import L from "leaflet";
+import "leaflet-routing-machine";
+import "leaflet/dist/leaflet.css";
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Info,
+  Layers,
+  MapIcon,
+  MapPin,
+  Navigation,
+  Printer,
+  RefreshCw,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
+import PriorityQueue from "priorityqueuejs";
+import React, { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  MapContainer,
+  Marker,
+  Polygon,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { useAppContext } from "../context/AppContext";
 
 // Fix for default marker icons in react-leaflet
-import iconUrl from "leaflet/dist/images/marker-icon.png"
-import iconShadowUrl from "leaflet/dist/images/marker-shadow.png"
+import iconUrl from "leaflet/dist/images/marker-icon.png";
+import iconShadowUrl from "leaflet/dist/images/marker-shadow.png";
 
 const DefaultIcon = L.icon({
   iconUrl,
   shadowUrl: iconShadowUrl,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
-})
+});
 
-L.Marker.prototype.options.icon = DefaultIcon
+L.Marker.prototype.options.icon = DefaultIcon;
 
 /* ---------- Types ---------- */
 interface Route {
-  id: string
-  name: string
-  status: "Open" | "Warning" | "Closed"
-  statusColor: string
-  updated: string
-  startPoint: [number, number]
-  endPoint: [number, number]
-  district: string
+  id: string;
+  name: string;
+  status: "Open" | "Warning" | "Closed";
+  statusColor: string;
+  updated: string;
+  startPoint: [number, number];
+  endPoint: [number, number];
+  district: string;
 }
 
 interface Update {
-  id: string
-  time: string
-  title: string
-  description: string
-  severity: "High" | "Medium" | "Low"
+  id: string;
+  time: string;
+  title: string;
+  description: string;
+  severity: "High" | "Medium" | "Low";
 }
 
 interface Communication {
-  id: string
-  title: string
-  time: string
-  recipients: string
-  status: "Delivered" | "Pending" | "Failed"
+  id: string;
+  title: string;
+  time: string;
+  recipients: string;
+  status: "Delivered" | "Pending" | "Failed";
 }
 
 interface FloodZone {
-  id: string
-  name: string
-  coordinates: [number, number][]
-  riskLevel: "high" | "medium" | "low"
+  id: string;
+  name: string;
+  coordinates: [number, number][];
+  riskLevel: "high" | "medium" | "low";
 }
 
 interface GraphNode {
-  id: string
-  coordinates: [number, number]
+  id: string;
+  coordinates: [number, number];
   connections: {
-    nodeId: string
-    distance: number
-    riskLevel: "high" | "medium" | "low" | "safe"
-  }[]
+    nodeId: string;
+    distance: number;
+    riskLevel: "high" | "medium" | "low" | "safe";
+  }[];
 }
 
-function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap()
+/* ---------- Simple ChangeView for react-leaflet ---------- */
+function ChangeView({
+  center,
+  zoom,
+}: {
+  center: [number, number];
+  zoom: number;
+}) {
+  const map = useMap();
   useEffect(() => {
-    map.setView(center, zoom)
-  }, [center, zoom, map])
-  return null
+    map.setView(center, zoom);
+  }, [center, zoom, map]);
+  return null;
 }
 
+/* ---------- Mocked Tamil Nadu district coordinates ---------- */
 const tamilNaduDistricts: { name: string; coordinates: [number, number] }[] = [
   { name: "Chennai", coordinates: [13.0827, 80.2707] },
   { name: "Coimbatore", coordinates: [11.0168, 76.9558] },
@@ -115,6 +144,7 @@ const tamilNaduDistricts: { name: string; coordinates: [number, number] }[] = [
   { name: "Tirupattur", coordinates: [12.495, 78.5686] },
   { name: "Villupuram", coordinates: [11.9401, 79.4861] },
   { name: "Theni", coordinates: [10.0104, 77.4768] },
+  // Chennai neighborhoods
   { name: "Chennai Central", coordinates: [13.0827, 80.2707] },
   { name: "T. Nagar", coordinates: [13.0418, 80.2341] },
   { name: "Adyar", coordinates: [13.0012, 80.2565] },
@@ -125,106 +155,244 @@ const tamilNaduDistricts: { name: string; coordinates: [number, number] }[] = [
   { name: "Sholinganallur", coordinates: [12.901, 80.2279] },
   { name: "Guindy", coordinates: [13.0067, 80.2206] },
   { name: "Mylapore", coordinates: [13.0368, 80.2676] },
-]
+];
 
+/* ---------- Component ---------- */
 export default function SafeRoutes() {
-  const muiTheme = useMuiTheme()
-  const { isDarkMode } = useThemeContext()
-  const { refreshData, sendEmergencyBroadcast, isLoading, userLocation, addAlert } = useAppContext()
+  const theme = useTheme();
+  const {
+    refreshData,
+    sendEmergencyBroadcast,
+    isLoading,
+    userLocation,
+    addAlert,
+  } = useAppContext();
 
-  const [selectedView, setSelectedView] = useState("Traffic")
-  const [notificationMessage, setNotificationMessage] = useState("")
-  const [notificationPriority, setNotificationPriority] = useState("High")
-  const [notificationRecipients, setNotificationRecipients] = useState("All Recipients")
-  const [refreshing, setRefreshing] = useState(false)
-  const [routes, setRoutes] = useState<Route[]>([])
-  const [updates, setUpdates] = useState<Update[]>([])
-  const [communications, setCommunications] = useState<Communication[]>([])
-  const [showRouteDetails, setShowRouteDetails] = useState<string | null>(null)
-  const [sendingNotification, setSendingNotification] = useState(false)
-  const [mapCenter, setMapCenter] = useState<[number, number]>([13.0827, 80.2707])
-  const [mapZoom, setMapZoom] = useState(11)
-  const [mapType, setMapType] = useState<"street" | "satellite">("street")
-  const [showFloodZones, setShowFloodZones] = useState(true)
-  const [showRoads, setShowRoads] = useState(true)
-  const [fullScreenMap, setFullScreenMap] = useState(false)
-  const [fromLocation, setFromLocation] = useState("Chennai")
-  const [toLocation, setToLocation] = useState("Coimbatore")
+  /* ---------- Local state (kept same layout/align) ---------- */
+  const [selectedView, setSelectedView] = useState("Traffic");
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationPriority, setNotificationPriority] = useState("High");
+  const [notificationRecipients, setNotificationRecipients] =
+    useState("All Recipients");
+  const [refreshing, setRefreshing] = useState(false);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [updates, setUpdates] = useState<Update[]>([]);
+  const [communications, setCommunications] = useState<Communication[]>([]);
+  const [showRouteDetails, setShowRouteDetails] = useState<string | null>(null);
+  const [sendingNotification, setSendingNotification] = useState(false);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([
+    13.0827, 80.2707,
+  ]);
+  const [mapZoom, setMapZoom] = useState(11);
+  const [mapType, setMapType] = useState<"street" | "satellite">("street");
+  const [showLayers, setShowLayers] = useState(false);
+  const [showFloodZones, setShowFloodZones] = useState(true);
+  const [showShelters, setShowShelters] = useState(true);
+  const [showRoads, setShowRoads] = useState(true);
+  const [fullScreenMap, setFullScreenMap] = useState(false);
+  const [selectedDistrict, setSelectedDistrict] = useState("All Districts");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [routingControl, setRoutingControl] =
+    useState<L.Routing.Control | null>(null);
+  const [customRoute, setCustomRoute] = useState<{
+    start: [number, number] | null;
+    end: [number, number] | null;
+  }>({ start: null, end: null });
+  const [fromLocation, setFromLocation] = useState("Chennai Central");
+  const [toLocation, setToLocation] = useState("Adyar");
+  const [routeRiskLevel, setRouteRiskLevel] = useState<
+    "high" | "medium" | "low" | null
+  >(null);
+  const [showRouteRisk, setShowRouteRisk] = useState(false);
   const [riskRoutes, setRiskRoutes] = useState<{
-    high: L.Polyline | null
-    medium: L.Polyline | null
-    low: L.Polyline | null
-  }>({ high: null, medium: null, low: null })
-  const [floodZones, setFloodZones] = useState<FloodZone[]>([])
-  const [roadNetwork, setRoadNetwork] = useState<GraphNode[]>([])
-  const [shortestPath, setShortestPath] = useState<[number, number][] | null>(null)
-  const [avoidFloodZones, setAvoidFloodZones] = useState(true)
-  const [routingControl, setRoutingControl] = useState<L.Routing.Control | null>(null)
+    high: L.Polyline | null;
+    medium: L.Polyline | null;
+    low: L.Polyline | null;
+  }>({ high: null, medium: null, low: null });
+  const [floodZones, setFloodZones] = useState<FloodZone[]>([]);
+  const [roadNetwork, setRoadNetwork] = useState<GraphNode[]>([]);
+  const [shortestPath, setShortestPath] = useState<[number, number][] | null>(
+    null
+  );
+  const [showShortestPath, setShowShortestPath] = useState(true);
+  const [avoidFloodZones, setAvoidFloodZones] = useState(true);
 
-  const mapRef = useRef<L.Map | null>(null)
+  const mapRef = useRef<L.Map | null>(null);
 
   const stats = [
-    { title: "Active Evacuations", value: "3", icon: <AlertTriangle size={20} />, className: "border-red-100" },
-    { title: "Blocked Roads", value: "12", icon: <AlertCircle size={20} />, className: "border-orange-100" },
-    { title: "Safe Routes", value: "8", icon: <CheckCircle2 size={20} />, className: "border-green-100" },
-    { title: "Active Users", value: "1,247", icon: <Users size={20} />, className: "border-blue-100" },
-  ]
+    {
+      title: "Active Evacuations",
+      value: "3",
+      icon: <AlertTriangle size={20} />,
+      className: "border-red-100",
+    },
+    {
+      title: "Blocked Roads",
+      value: "12",
+      icon: <AlertCircle size={20} />,
+      className: "border-orange-100",
+    },
+    {
+      title: "Safe Routes",
+      value: "8",
+      icon: <CheckCircle2 size={20} />,
+      className: "border-green-100",
+    },
+    {
+      title: "Active Users",
+      value: "1,247",
+      icon: <Users size={20} />,
+      className: "border-blue-100",
+    },
+  ];
 
+  /* ---------- Lifecycle ---------- */
   useEffect(() => {
-    loadMockData()
+    loadMockData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   useEffect(() => {
     if (userLocation) {
-      setMapCenter([userLocation.lat, userLocation.lng])
-      setMapZoom(12)
+      setMapCenter([userLocation.lat, userLocation.lng]);
+      setMapZoom(12);
     }
-  }, [userLocation])
+  }, [userLocation]);
 
-  const calculateDistance = (point1: [number, number], point2: [number, number]): number => {
-    const R = 6371
-    const dLat = ((point2[0] - point1[0]) * Math.PI) / 180
-    const dLon = ((point2[1] - point1[1]) * Math.PI) / 180
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((point1[0] * Math.PI) / 180) *
-        Math.cos((point2[0] * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-  }
+  useEffect(() => {
+    const navigationTarget = localStorage.getItem("mapNavigationTarget");
+    if (navigationTarget) {
+      try {
+        const target = JSON.parse(navigationTarget);
+        if (target.coordinates) {
+          setMapCenter(target.coordinates);
+          setMapZoom(target.zoom || 15);
+          localStorage.removeItem("mapNavigationTarget");
+        }
+      } catch (err) {
+        console.error("navigationTarget parse error", err);
+      }
+    }
+  }, []);
 
+  useEffect(() => {
+    if (mapRef.current) {
+      const timer = setTimeout(() => {
+        calculateSafeRoute({ preventDefault: () => {} } as FormEvent);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapRef.current, roadNetwork]);
+
+  /* ---------- Data generation ---------- */
   const loadMockData = async () => {
-    const tamilNaduRoutes: Route[] = tamilNaduDistricts.slice(0, 8).map((district, index) => ({
-      id: `route${index + 1}`,
-      name: `${district.name} Evacuation Route`,
-      status: (["Open", "Warning", "Closed"] as const)[index % 3],
-      statusColor: (["text-green-500", "text-orange-500", "text-red-500"] as const)[index % 3],
-      updated: ["2 mins ago", "5 mins ago", "12 mins ago"][index % 3],
-      startPoint: district.coordinates,
-      endPoint: [
-        district.coordinates[0] + (Math.random() * 0.1 - 0.05),
-        district.coordinates[1] + (Math.random() * 0.1 - 0.05),
-      ] as [number, number],
-      district: district.name,
-    }))
+    // create routes from first 8 districts
+    const tamilNaduRoutes: Route[] = tamilNaduDistricts
+      .slice(0, 8)
+      .map((district, index) => {
+        const statusOptions = [
+          "Open",
+          "Warning",
+          "Closed",
+          "Open",
+          "Open",
+          "Warning",
+          "Open",
+          "Closed",
+        ];
+        const statusColorOptions = [
+          "text-green-500",
+          "text-orange-500",
+          "text-red-500",
+          "text-green-500",
+          "text-green-500",
+          "text-orange-500",
+          "text-green-500",
+          "text-red-500",
+        ];
+        const updatedOptions = [
+          "2 mins ago",
+          "5 mins ago",
+          "12 mins ago",
+          "15 mins ago",
+          "20 mins ago",
+          "25 mins ago",
+          "30 mins ago",
+          "35 mins ago",
+        ];
 
-    setRoutes(tamilNaduRoutes)
+        const endLat = district.coordinates[0] + (Math.random() * 0.1 - 0.05);
+        const endLng = district.coordinates[1] + (Math.random() * 0.1 - 0.05);
 
-    const generatedUpdates: Update[] = tamilNaduRoutes.slice(0, 3).map((route, index) => ({
-      id: `update${index + 1}`,
-      time: new Date(Date.now() - 1000 * 60 * 15 * (index + 1)).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      title: `${route.district} ${["Bridge", "Highway Exit", "Route"][index]}`,
-      description: ["Road closure due to flooding", "Heavy traffic congestion", "Route cleared and reopened"][index],
-      severity: (["High", "Medium", "Low"] as const)[index],
-    }))
-    setUpdates(generatedUpdates)
+        return {
+          id: `route${index + 1}`,
+          name: `${district.name} Evacuation Route`,
+          status: statusOptions[index] as "Open" | "Warning" | "Closed",
+          statusColor: statusColorOptions[index],
+          updated: updatedOptions[index],
+          startPoint: district.coordinates,
+          endPoint: [endLat, endLng],
+          district: district.name,
+        };
+      });
 
+    setRoutes(tamilNaduRoutes);
+
+    const generatedUpdates: Update[] = tamilNaduRoutes
+      .slice(0, 3)
+      .map((route, index) => {
+        const severityOptions = ["High", "Medium", "Low"];
+        const descriptionOptions = [
+          `Road closure due to flooding in ${route.district}`,
+          `Heavy traffic congestion in ${route.district}`,
+          `Route cleared and reopened in ${route.district}`,
+        ];
+
+        return {
+          id: `update${index + 1}`,
+          time: new Date(
+            Date.now() - 1000 * 60 * 15 * (index + 1)
+          ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          title: `${route.district} ${
+            index === 0 ? "Bridge" : index === 1 ? "Highway Exit" : "Route"
+          }`,
+          description: descriptionOptions[index],
+          severity: severityOptions[index] as "High" | "Medium" | "Low",
+        };
+      });
+    setUpdates(generatedUpdates);
+
+    const generatedCommunications: Communication[] = [
+      {
+        id: "comm1",
+        title: "Emergency evacuation required for Chennai area",
+        time: new Date(Date.now() - 1000 * 60 * 15).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        recipients: "1,247",
+        status: "Delivered",
+      },
+      {
+        id: "comm2",
+        title: "New safe route available via Coimbatore East",
+        time: new Date(Date.now() - 1000 * 60 * 30).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        recipients: "892",
+        status: "Delivered",
+      },
+    ];
+    setCommunications(generatedCommunications);
+
+    // flood zones & road network
+    generateMockFloodZones();
+    setTimeout(() => generateRoadNetwork(), 500);
+  };
+
+  const generateMockFloodZones = () => {
     const mockFloodZones: FloodZone[] = [
       {
         id: "flood1",
@@ -235,163 +403,1731 @@ export default function SafeRoutes() {
           [13.0727, 80.2907],
           [13.0627, 80.2807],
           [13.0827, 80.2707],
-        ] as [number, number][],
+        ],
         riskLevel: "high",
       },
-    ]
-    setFloodZones(mockFloodZones)
-  }
+      {
+        id: "flood2",
+        name: "Adyar River Flood Zone",
+        coordinates: [
+          [13.0012, 80.2565],
+          [13.0112, 80.2665],
+          [13.0212, 80.2565],
+          [13.0112, 80.2465],
+          [13.0012, 80.2565],
+        ],
+        riskLevel: "medium",
+      },
+      {
+        id: "flood3",
+        name: "Velachery Flood Zone",
+        coordinates: [
+          [12.9815, 80.2176],
+          [12.9915, 80.2276],
+          [12.9715, 80.2376],
+          [12.9615, 80.2276],
+          [12.9815, 80.2176],
+        ],
+        riskLevel: "high",
+      },
+    ];
+    setFloodZones(mockFloodZones);
+  };
 
+  const generateRoadNetwork = () => {
+    const nodes: GraphNode[] = tamilNaduDistricts.map((d) => ({
+      id: d.name,
+      coordinates: d.coordinates,
+      connections: [],
+    }));
+
+    nodes.forEach((node) => {
+      const others = nodes.filter((n) => n.id !== node.id);
+      const sorted = others.sort(
+        (a, b) =>
+          calculateDistance(node.coordinates, a.coordinates) -
+          calculateDistance(node.coordinates, b.coordinates)
+      );
+      for (let i = 0; i < Math.min(3, sorted.length); i++) {
+        const distance = calculateDistance(
+          node.coordinates,
+          sorted[i].coordinates
+        );
+        let riskLevel: "high" | "medium" | "low" | "safe" = "safe";
+        for (const fz of floodZones) {
+          if (
+            isPathCrossingPolygon(
+              node.coordinates,
+              sorted[i].coordinates,
+              fz.coordinates
+            )
+          ) {
+            riskLevel = fz.riskLevel;
+            break;
+          }
+        }
+        node.connections.push({ nodeId: sorted[i].id, distance, riskLevel });
+      }
+    });
+
+    setRoadNetwork(nodes);
+  };
+
+  /* ---------- Geometry helpers ---------- */
+  const calculateDistance = (
+    point1: [number, number],
+    point2: [number, number]
+  ): number => {
+    const R = 6371;
+    const dLat = ((point2[0] - point1[0]) * Math.PI) / 180;
+    const dLon = ((point2[1] - point1[1]) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((point1[0] * Math.PI) / 180) *
+        Math.cos((point2[0] * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const isPathCrossingPolygon = (
+    start: [number, number],
+    end: [number, number],
+    polygonCoords: [number, number][]
+  ) => {
+    const midpoint: [number, number] = [
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2,
+    ];
+    return isPointInPolygon(midpoint, polygonCoords);
+  };
+
+  const isPointInPolygon = (
+    point: [number, number],
+    polygon: [number, number][]
+  ) => {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i][1],
+        yi = polygon[i][0];
+      const xj = polygon[j][1],
+        yj = polygon[j][0];
+      const intersect =
+        yi > point[0] !== yj > point[0] &&
+        point[1] < ((xj - xi) * (point[0] - yi)) / (yj - yi) + xi;
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  };
+
+  /* ---------- Dijkstra-style shortest path ---------- */
+  const findShortestPath = (
+    startNodeId: string,
+    endNodeId: string,
+    avoidFloodAreas = true
+  ): [number, number][] => {
+    const startNode = roadNetwork.find((n) => n.id === startNodeId);
+    const endNode = roadNetwork.find((n) => n.id === endNodeId);
+    if (!startNode || !endNode) {
+      console.error("start/end not in network");
+      return [];
+    }
+
+    const distances: Record<string, number> = {};
+    const previous: Record<string, string | null> = {};
+    const visited = new Set<string>();
+    const pq = new PriorityQueue(
+      (
+        a: { id: string; distance: number },
+        b: { id: string; distance: number }
+      ) => b.distance - a.distance
+    );
+
+    roadNetwork.forEach((n) => {
+      distances[n.id] = Number.POSITIVE_INFINITY;
+      previous[n.id] = null;
+    });
+
+    distances[startNodeId] = 0;
+    pq.enq({ id: startNodeId, distance: 0 });
+
+    while (!pq.isEmpty()) {
+      const cur = pq.deq();
+      if (!cur) break;
+      if (visited.has(cur.id)) continue;
+      visited.add(cur.id);
+      if (cur.id === endNodeId) break;
+
+      const currentNode = roadNetwork.find((n) => n.id === cur.id);
+      if (!currentNode) continue;
+
+      for (const conn of currentNode.connections) {
+        if (avoidFloodAreas && conn.riskLevel === "high") continue;
+        let riskMultiplier = 1;
+        if (conn.riskLevel === "medium")
+          riskMultiplier = avoidFloodAreas ? 2 : 1;
+        if (conn.riskLevel === "low")
+          riskMultiplier = avoidFloodAreas ? 1.5 : 1;
+
+        const newDist = distances[cur.id] + conn.distance * riskMultiplier;
+        if (newDist < distances[conn.nodeId]) {
+          distances[conn.nodeId] = newDist;
+          previous[conn.nodeId] = cur.id;
+          pq.enq({ id: conn.nodeId, distance: newDist });
+        }
+      }
+    }
+
+    const pathIds: string[] = [];
+    let curId: string | null = endNodeId;
+    while (curId && curId !== startNodeId) {
+      pathIds.unshift(curId);
+      curId = previous[curId] || null;
+    }
+    if (pathIds.length > 0 || startNodeId === endNodeId)
+      pathIds.unshift(startNodeId);
+
+    const coords: [number, number][] = pathIds.map((id) => {
+      const n = roadNetwork.find((x) => x.id === id);
+      return n ? n.coordinates : ([0, 0] as [number, number]);
+    });
+
+    return coords;
+  };
+
+  /* ---------- Leaflet routing utility ---------- */
+  const calculateRoute = (
+    map: L.Map,
+    start: [number, number],
+    end: [number, number],
+    color = String(theme.palette.primary.main)
+  ): L.Routing.Control => {
+    const createPlan = () =>
+      L.Routing.plan([L.latLng(start), L.latLng(end)], {
+        createMarker: (i, waypoint) =>
+          L.marker(waypoint.latLng, {
+            draggable: true,
+            icon: L.icon({
+              iconUrl:
+                i === 0
+                  ? "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png"
+                  : "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+              shadowUrl: iconShadowUrl,
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+            }),
+          }),
+      });
+
+    const routingControl = L.Routing.control({
+      plan: createPlan(),
+
+      router: L.Routing.osrmv1({
+        serviceUrl: "https://router.project-osrm.org/route/v1",
+        profile: "driving",
+      }),
+      collapsible: true,
+      fitSelectedRoutes: true,
+      showAlternatives: false,
+    }).addTo(map);
+
+    const container = routingControl.getContainer();
+    if (container) container.style.display = "none";
+    return routingControl;
+  };
+
+  const generateMultipleRoutes = (
+    map: L.Map,
+    start: [number, number],
+    end: [number, number]
+  ) => {
+    if (riskRoutes.high) map.removeLayer(riskRoutes.high);
+    if (riskRoutes.medium) map.removeLayer(riskRoutes.medium);
+    if (riskRoutes.low) map.removeLayer(riskRoutes.low);
+
+    const routesDef = [
+      {
+        risk: "high",
+        color: String(theme.palette.error.main),
+        waypoints: [
+          start,
+          [(start[0] + end[0]) / 2 + 0.05, (start[1] + end[1]) / 2 + 0.05],
+          end,
+        ],
+      },
+      {
+        risk: "medium",
+        color: String(theme.palette.warning.main),
+        waypoints: [
+          start,
+          [(start[0] + end[0]) / 2 - 0.02, (start[1] + end[1]) / 2],
+          end,
+        ],
+      },
+      {
+        risk: "low",
+        color: String(theme.palette.success.main),
+        waypoints: [
+          start,
+          [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 - 0.05],
+          end,
+        ],
+      },
+    ];
+
+    const newRiskRoutes = {
+      high: null as L.Polyline | null,
+      medium: null as L.Polyline | null,
+      low: null as L.Polyline | null,
+    };
+
+    routesDef.forEach((r) => {
+      const poly = L.polyline(r.waypoints as L.LatLngExpression[], {
+        color: r.color,
+        weight: r.risk === "high" ? 3 : r.risk === "medium" ? 4 : 5,
+        opacity: 0.85,
+        dashArray:
+          r.risk === "high" ? "6,8" : r.risk === "medium" ? "5,5" : undefined,
+      }).addTo(map);
+
+      poly.bindPopup(
+        `<b>${r.risk.charAt(0).toUpperCase() + r.risk.slice(1)} Risk Route</b>`
+      );
+      if (r.risk === "high") newRiskRoutes.high = poly;
+      if (r.risk === "medium") newRiskRoutes.medium = poly;
+      if (r.risk === "low") newRiskRoutes.low = poly;
+    });
+
+    setRiskRoutes(newRiskRoutes);
+    return newRiskRoutes;
+  };
+
+  /* ---------- Handlers ---------- */
   const handleRefresh = async () => {
-    setRefreshing(true)
-    await loadMockData()
-    setTimeout(() => setRefreshing(false), 900)
-  }
+    setRefreshing(true);
+    await refreshData();
+    await loadMockData();
+    setTimeout(() => setRefreshing(false), 900);
+  };
 
-  if (isLoading) {
-    return <LoadingSpinner fullScreen />
-  }
+  const handleSendNotification = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!notificationMessage.trim()) return;
+    setSendingNotification(true);
+    try {
+      await sendEmergencyBroadcast(
+        notificationMessage,
+        selectedDistrict !== "All Districts" ? selectedDistrict : undefined
+      );
+      const newCommunication: Communication = {
+        id: `comm${communications.length + 1}`,
+        title: notificationMessage,
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        recipients:
+          notificationRecipients === "All Recipients" ? "1,247" : "500",
+        status: "Delivered",
+      };
+      setCommunications([newCommunication, ...communications]);
+      setNotificationMessage("");
+      addAlert({
+        title: "Notification Sent",
+        message: `Your emergency notification has been sent to ${notificationRecipients}`,
+        type: "success",
+      });
+    } catch (err) {
+      console.error(err);
+      addAlert({
+        title: "Notification Failed",
+        message:
+          "There was an error sending your notification. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setSendingNotification(false);
+    }
+  };
 
-  const primaryColor = muiTheme.palette.primary.main
-  const textColor = muiTheme.palette.text.primary
-  const bgColor = muiTheme.palette.background.paper
-  const subtleBorder = muiTheme.palette.divider
+  const handleViewRouteDetails = (routeId: string) => {
+    setShowRouteDetails(routeId);
+    const route = routes.find((r) => r.id === routeId);
+    if (!route) return;
+
+    const center: [number, number] = [
+      (route.startPoint[0] + route.endPoint[0]) / 2,
+      (route.startPoint[1] + route.endPoint[1]) / 2,
+    ];
+    setMapCenter(center);
+    setMapZoom(12);
+
+    if (mapRef.current) {
+      if (routingControl) mapRef.current.removeControl(routingControl);
+      const color =
+        route.status === "Open"
+          ? String(theme.palette.success.main)
+          : route.status === "Warning"
+          ? String(theme.palette.warning.main)
+          : String(theme.palette.error.main);
+      const rc = calculateRoute(
+        mapRef.current,
+        route.startPoint,
+        route.endPoint,
+        color
+      );
+      setRoutingControl(rc);
+    }
+  };
+
+  const handlePrintMap = () => window.print();
+  const handleDownloadMap = () =>
+    addAlert({
+      title: "Map Downloaded",
+      message: "The map has been downloaded to your device.",
+      type: "success",
+    });
+
+  const handleMapClick = (e: L.LeafletMouseEvent) => {
+    if (!customRoute.start) {
+      setCustomRoute({ start: [e.latlng.lat, e.latlng.lng], end: null });
+      addAlert({
+        title: "Start Point Selected",
+        message: "Now click on the map to select your destination point.",
+        type: "info",
+      });
+    } else if (!customRoute.end) {
+      setCustomRoute((c) => ({ ...c, end: [e.latlng.lat, e.latlng.lng] }));
+      if (mapRef.current && customRoute.start) {
+        if (routingControl) mapRef.current.removeControl(routingControl);
+        const rc = calculateRoute(
+          mapRef.current,
+          customRoute.start,
+          [e.latlng.lat, e.latlng.lng],
+          String(theme.palette.primary.main)
+        );
+        setRoutingControl(rc);
+        addAlert({
+          title: "Route Calculated",
+          message: "Your custom route has been calculated.",
+          type: "success",
+        });
+      }
+    } else {
+      setCustomRoute({ start: [e.latlng.lat, e.latlng.lng], end: null });
+      addAlert({
+        title: "New Route Started",
+        message: "Now click on the map to select your destination point.",
+        type: "info",
+      });
+    }
+  };
+
+  const calculateSafeRoute = (e: FormEvent) => {
+    e.preventDefault();
+    if (!fromLocation.trim() || !toLocation.trim()) {
+      addAlert({
+        title: "Missing Information",
+        message: "Please enter both starting point and destination",
+        type: "error",
+      });
+      return;
+    }
+
+    const from = tamilNaduDistricts.find((d) =>
+      d.name.toLowerCase().includes(fromLocation.toLowerCase())
+    );
+    const to = tamilNaduDistricts.find((d) =>
+      d.name.toLowerCase().includes(toLocation.toLowerCase())
+    );
+    if (!from || !to) {
+      addAlert({
+        title: "Location Not Found",
+        message:
+          "One or both locations could not be found. Try using district names in Tamil Nadu.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (routingControl && mapRef.current)
+      mapRef.current.removeControl(routingControl);
+    if (mapRef.current) {
+      if (riskRoutes.high) mapRef.current.removeLayer(riskRoutes.high);
+      if (riskRoutes.medium) mapRef.current.removeLayer(riskRoutes.medium);
+      if (riskRoutes.low) mapRef.current.removeLayer(riskRoutes.low);
+    }
+
+    const pathCoords = findShortestPath(from.name, to.name, avoidFloodZones);
+    setShortestPath(pathCoords);
+
+    if (mapRef.current && pathCoords && pathCoords.length > 0) {
+      const line = L.polyline(pathCoords, {
+        color: String(theme.palette.primary.main),
+        weight: 5,
+        opacity: 0.85,
+      }).addTo(mapRef.current);
+      line.bindPopup(
+        "<b>Shortest Safe Route</b><br>Calculated using Dijkstra's algorithm"
+      );
+      generateMultipleRoutes(mapRef.current, from.coordinates, to.coordinates);
+
+      // Add markers and center
+      const startMarker = L.marker(from.coordinates, {
+        icon: L.icon({
+          iconUrl:
+            "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+          shadowUrl: iconShadowUrl,
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+        }),
+      }).addTo(mapRef.current);
+
+      const endMarker = L.marker(to.coordinates, {
+        icon: L.icon({
+          iconUrl:
+            "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+          shadowUrl: iconShadowUrl,
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+        }),
+      }).addTo(mapRef.current);
+
+      startMarker.bindPopup(`<b>Start: ${fromLocation}</b>`);
+      endMarker.bindPopup(`<b>Destination: ${toLocation}</b>`);
+
+      const centerLat = (from.coordinates[0] + to.coordinates[0]) / 2;
+      const centerLng = (from.coordinates[1] + to.coordinates[1]) / 2;
+      setMapCenter([centerLat, centerLng]);
+      setMapZoom(11);
+    }
+
+    setShowRouteRisk(true);
+    addAlert({
+      title: "Safe Route Calculated",
+      message: `Shortest safe route from ${fromLocation} to ${toLocation} calculated`,
+      type: "success",
+    });
+  };
+
+  if (isLoading) return <LoadingSpinner  />;
+
+  /* ---------- Theme colors helpers (do not alter layout) ---------- */
+  const panelBg = theme.palette.background.paper;
+  const pageBg = theme.palette.background.default;
+  const textPrimary = theme.palette.text.primary;
+  const textSecondary = theme.palette.text.secondary;
+  const subtleBorder = theme.palette.divider;
+
+  /* ---------- Filtered routes for list (keeps your layout) ---------- */
+  const filteredRoutes = routes.filter((route) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      route.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      route.district.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesDistrict =
+      selectedDistrict === "All Districts" ||
+      route.district === selectedDistrict;
+    return matchesSearch && matchesDistrict;
+  });
 
   return (
-    <div style={{ backgroundColor: muiTheme.palette.background.default, color: textColor, minHeight: "100vh" }}>
-      <div className="p-4 lg:p-6">
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <h1 className="text-3xl font-bold">{isDarkMode ? "🌙" : "☀️"} Safe Routes</h1>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
+    <div style={{ padding: 16 }}>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {stats.map((s, i) => (
+          <div
+            key={i}
             style={{
-              backgroundColor: primaryColor,
-              color: "white",
-              padding: "8px 16px",
-              borderRadius: "6px",
-              border: "none",
-              cursor: refreshing ? "not-allowed" : "pointer",
-              opacity: refreshing ? 0.6 : 1,
+              background: panelBg,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: theme.shadows[1],
+              border: `1px solid ${subtleBorder}`,
             }}
           >
-            {refreshing ? "Refreshing..." : "Refresh Data"}
-          </button>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, idx) => (
             <div
-              key={idx}
-              style={{ backgroundColor: bgColor, border: `1px solid ${subtleBorder}` }}
-              className="rounded-lg p-4 shadow-md"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
             >
-              <div className="flex items-center gap-2">
-                {stat.icon}
-                <div>
-                  <p className="text-sm font-medium opacity-75">{stat.title}</p>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <div
-              style={{ backgroundColor: bgColor, border: `1px solid ${subtleBorder}` }}
-              className="overflow-hidden rounded-lg shadow-md"
-            >
-              <div className="h-96 lg:h-[600px]">
-                <MapContainer
-                  center={mapCenter}
-                  zoom={mapZoom}
-                  style={{ height: "100%", width: "100%" }}
-                  whenReady={(event) => {
-                    mapRef.current = event.target
+              <div>
+                <p style={{ color: textSecondary, fontSize: 13 }}>{s.title}</p>
+                <h3
+                  style={{
+                    color: textPrimary,
+                    fontSize: 22,
+                    fontWeight: 700,
+                    marginTop: 8,
                   }}
                 >
-                  <ChangeView center={mapCenter} zoom={mapZoom} />
-                  <TileLayer
-                    url={
-                      mapType === "satellite"
-                        ? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                        : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    }
-                    attribution="&copy; OpenStreetMap contributors"
-                  />
-                  {showFloodZones &&
-                    floodZones.map((zone) => (
-                      <Polygon
-                        key={zone.id}
-                        positions={zone.coordinates}
-                        pathOptions={{ color: "red", fillOpacity: 0.3 }}
-                      >
-                        <Popup>{zone.name}</Popup>
-                      </Polygon>
-                    ))}
-                </MapContainer>
+                  {s.value}
+                </h3>
+              </div>
+              <div
+                style={{
+                  background:
+                    theme.palette.mode === "dark"
+                      ? "rgba(255,255,255,0.04)"
+                      : "#f7fafc",
+                  padding: 12,
+                  borderRadius: 999,
+                }}
+              >
+                {s.icon}
               </div>
             </div>
           </div>
+        ))}
+      </div>
 
-          <div className="space-y-4">
-            <div
-              style={{ backgroundColor: bgColor, border: `1px solid ${subtleBorder}` }}
-              className="rounded-lg p-4 shadow-md"
-            >
-              <h2 className="mb-4 text-lg font-semibold">Route Calculator</h2>
-              <form className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">From</label>
-                  <select
-                    value={fromLocation}
-                    onChange={(e) => setFromLocation(e.target.value)}
-                    className="w-full rounded border p-2 text-sm"
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column (map + controls) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Map Controls card */}
+          <div
+            style={{
+              background: panelBg,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: theme.shadows[1],
+              border: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() =>
+                      setMapType(mapType === "street" ? "satellite" : "street")
+                    }
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                      cursor: "pointer",
+                      background:
+                        mapType === "street"
+                          ? theme.palette.action.selected
+                          : "transparent",
+                      color:
+                        mapType === "street"
+                          ? theme.palette.primary.main
+                          : textPrimary,
+                    }}
                   >
-                    {tamilNaduDistricts.map((d) => (
-                      <option key={d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
+                    {mapType === "street" ? "Street View" : "Satellite View"}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">To</label>
-                  <select
-                    value={toLocation}
-                    onChange={(e) => setToLocation(e.target.value)}
-                    className="w-full rounded border p-2 text-sm"
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    title="Refresh"
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      border: "none",
+                      background: "transparent",
+                      cursor: refreshing ? "default" : "pointer",
+                      color: textPrimary,
+                    }}
                   >
-                    {tamilNaduDistricts.map((d) => (
-                      <option key={d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
+                    {refreshing ? (
+                      <RefreshCw size={18} />
+                    ) : (
+                      <RefreshCw size={18} />
+                    )}
+                  </button>
+                  <button
+                    onClick={handlePrintMap}
+                    title="Print"
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      border: "none",
+                      background: "transparent",
+                      color: textPrimary,
+                    }}
+                  >
+                    <Printer size={18} />
+                  </button>
+                  <button
+                    onClick={handleDownloadMap}
+                    title="Download"
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      border: "none",
+                      background: "transparent",
+                      color: textPrimary,
+                    }}
+                  >
+                    <Download size={18} />
+                  </button>
                 </div>
-                <label className="flex items-center gap-2">
+              </div>
+
+              {/* From/To form (alignment preserved) */}
+              <form
+                onSubmit={calculateSafeRoute}
+                style={{
+                  borderTop: `1px solid ${subtleBorder}`,
+                  paddingTop: 12,
+                  marginTop: 12,
+                }}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label
+                      htmlFor="fromLocation"
+                      style={{
+                        display: "block",
+                        fontSize: 13,
+                        marginBottom: 6,
+                        color: textSecondary,
+                      }}
+                    >
+                      From
+                    </label>
+                    <input
+                      id="fromLocation"
+                      type="text"
+                      value={fromLocation}
+                      onChange={(e) => setFromLocation(e.target.value)}
+                      placeholder="Enter starting point"
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 8,
+                        border: `1px solid ${subtleBorder}`,
+                        background:
+                          theme.palette.mode === "dark"
+                            ? theme.palette.background.default
+                            : "#fff",
+                        color: textPrimary,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="toLocation"
+                      style={{
+                        display: "block",
+                        fontSize: 13,
+                        marginBottom: 6,
+                        color: textSecondary,
+                      }}
+                    >
+                      To
+                    </label>
+                    <input
+                      id="toLocation"
+                      type="text"
+                      value={toLocation}
+                      onChange={(e) => setToLocation(e.target.value)}
+                      placeholder="Enter destination"
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 8,
+                        border: `1px solid ${subtleBorder}`,
+                        background:
+                          theme.palette.mode === "dark"
+                            ? theme.palette.background.default
+                            : "#fff",
+                        color: textPrimary,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 12,
+                  }}
+                >
                   <input
+                    id="avoidFloodZones"
                     type="checkbox"
                     checked={avoidFloodZones}
                     onChange={(e) => setAvoidFloodZones(e.target.checked)}
                   />
-                  <span className="text-sm">Avoid flood zones</span>
-                </label>
-                <button
-                  type="submit"
-                  style={{ backgroundColor: primaryColor, color: "white" }}
-                  className="w-full rounded py-2 font-medium"
+                  <label
+                    htmlFor="avoidFloodZones"
+                    style={{ fontSize: 14, color: textPrimary }}
+                  >
+                    Avoid flood-affected areas
+                  </label>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
                 >
-                  Calculate Route
-                </button>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 12 }}
+                  >
+                    {showRouteRisk && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: textPrimary,
+                          }}
+                        >
+                          Risk Level:
+                        </span>
+                        <span
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            background:
+                              routeRiskLevel === "high"
+                                ? theme.palette.error.light
+                                : routeRiskLevel === "medium"
+                                ? theme.palette.warning.light
+                                : theme.palette.success.light,
+                            color:
+                              routeRiskLevel === "high"
+                                ? theme.palette.error.dark
+                                : routeRiskLevel === "medium"
+                                ? theme.palette.warning.dark
+                                : theme.palette.success.dark,
+                          }}
+                        >
+                          {routeRiskLevel === "high"
+                            ? "High Risk"
+                            : routeRiskLevel === "medium"
+                            ? "Medium Risk"
+                            : routeRiskLevel === "low"
+                            ? "Low Risk"
+                            : "—"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    style={{
+                      background: theme.palette.primary.main,
+                      color: theme.palette.primary.contrastText,
+                      padding: "8px 14px",
+                      borderRadius: 8,
+                      border: "none",
+                    }}
+                  >
+                    Find Safe Route
+                  </button>
+                </div>
               </form>
+
+              {/* Legend */}
+              {showRouteRisk && (
+                <div
+                  style={{
+                    borderTop: `1px solid ${subtleBorder}`,
+                    paddingTop: 12,
+                    marginTop: 12,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      marginBottom: 8,
+                      color: textPrimary,
+                    }}
+                  >
+                    Route Risk Levels:
+                  </p>
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          background: theme.palette.error.main,
+                        }}
+                      />
+                      <span style={{ fontSize: 13, color: textPrimary }}>
+                        High Risk - Avoid
+                      </span>
+                    </div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          background: theme.palette.warning.main,
+                        }}
+                      />
+                      <span style={{ fontSize: 13, color: textPrimary }}>
+                        Medium Risk - Caution
+                      </span>
+                    </div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          background: theme.palette.success.main,
+                        }}
+                      />
+                      <span style={{ fontSize: 13, color: textPrimary }}>
+                        Low Risk - Safe
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Map container */}
+          <div
+            style={{
+              background: theme.palette.mode === "dark" ? "#0b1220" : "#f5f7fb",
+              height: fullScreenMap ? "80vh" : 500,
+              borderRadius: 12,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <MapContainer
+              center={mapCenter}
+              zoom={mapZoom}
+              style={{ height: "100%", width: "100%" }}
+              zoomControl={false}
+              whenReady={(event) => {
+                const map = event.target;
+                mapRef.current = map;
+                map.on("click", handleMapClick);
+              }}
+            >
+              <ChangeView center={mapCenter} zoom={mapZoom} />
+
+              {mapType === "street" ? (
+                <TileLayer
+                  attribution="&copy; OpenStreetMap contributors"
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+              ) : (
+                <TileLayer
+                  attribution="&copy; Esri"
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                />
+              )}
+
+              {showFloodZones &&
+                floodZones.map((zone) => (
+                  <Polygon
+                    key={zone.id}
+                    positions={zone.coordinates}
+                    pathOptions={{
+                      color:
+                        zone.riskLevel === "high"
+                          ? String(theme.palette.error.main)
+                          : zone.riskLevel === "medium"
+                          ? String(theme.palette.warning.main)
+                          : String(theme.palette.warning.light),
+                      fillColor:
+                        zone.riskLevel === "high"
+                          ? String(theme.palette.error.main)
+                          : zone.riskLevel === "medium"
+                          ? String(theme.palette.warning.main)
+                          : String(theme.palette.warning.light),
+                      fillOpacity: 0.28,
+                      weight: 2,
+                    }}
+                  >
+                    <Popup>
+                      <div style={{ padding: 8 }}>
+                        <h3 style={{ margin: 0 }}>{zone.name}</h3>
+                        <p
+                          style={{ margin: "6px 0 0 0", color: textSecondary }}
+                        >
+                          Risk Level: {zone.riskLevel}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Polygon>
+                ))}
+
+              {showShortestPath && shortestPath && shortestPath.length > 0 && (
+                <Polyline
+                  positions={shortestPath}
+                  pathOptions={{
+                    color: String(theme.palette.primary.main),
+                    weight: 5,
+                    opacity: 0.85,
+                  }}
+                >
+                  <Popup>
+                    <div style={{ padding: 8 }}>
+                      <h3 style={{ margin: 0 }}>Shortest Safe Route</h3>
+                      <p style={{ marginTop: 6, color: textSecondary }}>
+                        Calculated using Dijkstra's algorithm
+                      </p>
+                    </div>
+                  </Popup>
+                </Polyline>
+              )}
+
+              {routes.map((route) => (
+                <React.Fragment key={route.id}>
+                  <Marker position={route.startPoint}>
+                    <Popup>
+                      <div style={{ padding: 8 }}>
+                        <h3 style={{ margin: 0 }}>{route.name}</h3>
+                        <p
+                          style={{ margin: "6px 0 0 0", color: textSecondary }}
+                        >
+                          Status: {route.status}
+                        </p>
+                        <p
+                          style={{ margin: "6px 0 0 0", color: textSecondary }}
+                        >
+                          Updated: {route.updated}
+                        </p>
+                        <button
+                          onClick={() => handleViewRouteDetails(route.id)}
+                          style={{
+                            marginTop: 8,
+                            color: theme.palette.primary.main,
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          View Route Details
+                        </button>
+                      </div>
+                    </Popup>
+                  </Marker>
+
+                  <Marker position={route.endPoint}>
+                    <Popup>
+                      <div style={{ padding: 8 }}>
+                        <h3 style={{ margin: 0 }}>End: {route.name}</h3>
+                        <p style={{ marginTop: 6, color: textSecondary }}>
+                          Status: {route.status}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+
+                  {showRoads && (
+                    <Polyline
+                      positions={[route.startPoint, route.endPoint]}
+                      pathOptions={{
+                        color:
+                          route.status === "Open"
+                            ? String(theme.palette.success.main)
+                            : route.status === "Warning"
+                            ? String(theme.palette.warning.main)
+                            : String(theme.palette.error.main),
+                        weight: 3,
+                        opacity: route.status === "Closed" ? 0.5 : 1,
+                        dashArray:
+                          route.status === "Warning" ? "10,10" : undefined,
+                      }}
+                    />
+                  )}
+                </React.Fragment>
+              ))}
+
+              {userLocation && (
+                <Marker
+                  position={[userLocation.lat, userLocation.lng]}
+                  icon={
+                    new L.Icon({
+                      iconUrl:
+                        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+                      shadowUrl: iconShadowUrl,
+                      iconSize: [25, 41],
+                      iconAnchor: [12, 41],
+                    })
+                  }
+                />
+              )}
+
+              {customRoute.start && (
+                <Marker
+                  position={customRoute.start}
+                  icon={
+                    new L.Icon({
+                      iconUrl:
+                        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+                      shadowUrl: iconShadowUrl,
+                      iconSize: [25, 41],
+                    })
+                  }
+                />
+              )}
+
+              {customRoute.end && (
+                <Marker
+                  position={customRoute.end}
+                  icon={
+                    new L.Icon({
+                      iconUrl:
+                        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+                      shadowUrl: iconShadowUrl,
+                      iconSize: [25, 41],
+                    })
+                  }
+                />
+              )}
+            </MapContainer>
+
+            {/* Map controls overlay */}
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                zIndex: 1000,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <button
+                onClick={() => setFullScreenMap((s) => !s)}
+                title={fullScreenMap ? "Exit Full Screen" : "Full Screen"}
+                style={{
+                  background: panelBg,
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${subtleBorder}`,
+                  cursor: "pointer",
+                }}
+              >
+                {fullScreenMap ? <X size={18} /> : <MapIcon size={18} />}
+              </button>
+              <button
+                onClick={() => setShowLayers((s) => !s)}
+                title="Map Layers"
+                style={{
+                  background: panelBg,
+                  padding: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${subtleBorder}`,
+                  cursor: "pointer",
+                }}
+              >
+                <Layers size={18} />
+              </button>
+              {userLocation && (
+                <button
+                  onClick={() => {
+                    setMapCenter([userLocation.lat, userLocation.lng]);
+                    setMapZoom(15);
+                  }}
+                  title="Go to My Location"
+                  style={{
+                    background: panelBg,
+                    padding: 8,
+                    borderRadius: 8,
+                    border: `1px solid ${subtleBorder}`,
+                    cursor: "pointer",
+                  }}
+                >
+                  <MapPin size={18} />
+                </button>
+              )}
+            </div>
+
+            {/* Layers panel */}
+            {showLayers && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  left: 12,
+                  zIndex: 1000,
+                  background: panelBg,
+                  padding: 12,
+                  borderRadius: 8,
+                  boxShadow: theme.shadows[6],
+                  border: `1px solid ${subtleBorder}`,
+                }}
+              >
+                <h3 style={{ margin: 0, fontWeight: 700, color: textPrimary }}>
+                  Map Layers
+                </h3>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: textPrimary,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showFloodZones}
+                      onChange={() => setShowFloodZones((s) => !s)}
+                    />
+                    <span>Flood Zones</span>
+                  </label>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: textPrimary,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showShelters}
+                      onChange={() => setShowShelters((s) => !s)}
+                    />
+                    <span>Shelters</span>
+                  </label>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: textPrimary,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showRoads}
+                      onChange={() => setShowRoads((s) => !s)}
+                    />
+                    <span>Safe Routes</span>
+                  </label>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: textPrimary,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showShortestPath}
+                      onChange={() => setShowShortestPath((s) => !s)}
+                    />
+                    <span>Shortest Path</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Map instructions */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 12,
+                left: 12,
+                zIndex: 1000,
+                background: panelBg,
+                padding: 12,
+                borderRadius: 8,
+                boxShadow: theme.shadows[6],
+                border: `1px solid ${subtleBorder}`,
+                maxWidth: 320,
+              }}
+            >
+              <h3 style={{ margin: 0, fontWeight: 700, color: textPrimary }}>
+                Create Custom Route
+              </h3>
+              <p style={{ color: textSecondary, marginTop: 8 }}>
+                {!customRoute.start
+                  ? "Click on the map to set your starting point"
+                  : !customRoute.end
+                  ? "Now click to set your destination"
+                  : "Route created! Click again to start a new route"}
+              </p>
+            </div>
+          </div>
+
+          {/* Active Routes list (keeps layout) */}
+          <div
+            style={{
+              background: panelBg,
+              borderRadius: 12,
+              boxShadow: theme.shadows[1],
+              overflow: "hidden",
+              border: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <div
+              style={{
+                padding: 12,
+                borderBottom: `1px solid ${subtleBorder}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: textPrimary,
+                }}
+              >
+                Active Routes
+              </h2>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="text"
+                    placeholder="Search routes..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{
+                      width: 256,
+                      padding: "8px 12px 8px 36px",
+                      borderRadius: 8,
+                      border: `1px solid ${subtleBorder}`,
+                      background:
+                        theme.palette.mode === "dark"
+                          ? theme.palette.background.default
+                          : "#fff",
+                      color: textPrimary,
+                    }}
+                  />
+                  <Search
+                    size={16}
+                    style={{
+                      position: "absolute",
+                      left: 10,
+                      top: 10,
+                      color: textSecondary,
+                    }}
+                  />
+                </div>
+
+                <select
+                  value={selectedDistrict}
+                  onChange={(e) => {
+                    setSelectedDistrict(e.target.value);
+                    if (e.target.value !== "All Districts") {
+                      const d = tamilNaduDistricts.find(
+                        (x) => x.name === e.target.value
+                      );
+                      if (d) {
+                        setMapCenter(d.coordinates);
+                        setMapZoom(11);
+                      }
+                    } else {
+                      setMapCenter([11.1271, 78.6569]);
+                      setMapZoom(7);
+                    }
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${subtleBorder}`,
+                    background:
+                      theme.palette.mode === "dark"
+                        ? theme.palette.background.default
+                        : "#fff",
+                    color: textPrimary,
+                  }}
+                >
+                  <option>All Districts</option>
+                  {tamilNaduDistricts.map((d) => (
+                    <option key={d.name}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ maxHeight: 300, overflowY: "auto" }}>
+              {filteredRoutes.length > 0 ? (
+                filteredRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    style={{
+                      padding: 12,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: `1px solid ${subtleBorder}`,
+                      background: panelBg,
+                    }}
+                  >
+                    <div>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontWeight: 700,
+                          color: textPrimary,
+                        }}
+                      >
+                        {route.name}
+                      </h3>
+                      <p style={{ margin: 0, color: textSecondary }}>
+                        Updated {route.updated}
+                      </p>
+                    </div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 12 }}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color:
+                            route.status === "Open"
+                              ? String(theme.palette.success.main)
+                              : route.status === "Warning"
+                              ? String(theme.palette.warning.main)
+                              : String(theme.palette.error.main),
+                        }}
+                      >
+                        {route.status}
+                      </span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => handleViewRouteDetails(route.id)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            color: textSecondary,
+                          }}
+                          title="View Details"
+                        >
+                          <Info size={18} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMapCenter(route.startPoint);
+                            setMapZoom(14);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            color: textSecondary,
+                          }}
+                          title="Navigate"
+                        >
+                          <Navigation size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: 12,
+                    textAlign: "center",
+                    color: textSecondary,
+                  }}
+                >
+                  No routes match your search criteria
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right column (notifications, updates, communications) */}
+        <div className="space-y-6">
+          {/* Push notifications */}
+          <div
+            style={{
+              background: panelBg,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: theme.shadows[1],
+              border: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: textPrimary,
+              }}
+            >
+              Push Notifications
+            </h2>
+            <form
+              onSubmit={handleSendNotification}
+              style={{
+                marginTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <textarea
+                value={notificationMessage}
+                onChange={(e) => setNotificationMessage(e.target.value)}
+                placeholder="Enter notification message..."
+                required
+                style={{
+                  width: "100%",
+                  minHeight: 140,
+                  padding: 12,
+                  borderRadius: 8,
+                  border: `1px solid ${subtleBorder}`,
+                  background:
+                    theme.palette.mode === "dark"
+                      ? theme.palette.background.default
+                      : "#fff",
+                  color: textPrimary,
+                }}
+              />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                }}
+              >
+                <select
+                  value={notificationRecipients}
+                  onChange={(e) => setNotificationRecipients(e.target.value)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 8,
+                    border: `1px solid ${subtleBorder}`,
+                    background:
+                      theme.palette.mode === "dark"
+                        ? theme.palette.background.default
+                        : "#fff",
+                    color: textPrimary,
+                  }}
+                >
+                  <option>All Recipients</option>
+                  <option>Affected Areas Only</option>
+                  <option>Emergency Personnel</option>
+                </select>
+                <select
+                  value={notificationPriority}
+                  onChange={(e) => setNotificationPriority(e.target.value)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 8,
+                    border: `1px solid ${subtleBorder}`,
+                    background:
+                      theme.palette.mode === "dark"
+                        ? theme.palette.background.default
+                        : "#fff",
+                    color: textPrimary,
+                  }}
+                >
+                  <option>High Priority</option>
+                  <option>Medium Priority</option>
+                  <option>Low Priority</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={!notificationMessage.trim() || sendingNotification}
+                style={{
+                  background: theme.palette.primary.main,
+                  color: theme.palette.primary.contrastText,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                {sendingNotification ? "Sending..." : "Send Notification"}
+              </button>
+            </form>
+          </div>
+
+          {/* Recent Updates */}
+          <div
+            style={{
+              background: panelBg,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: theme.shadows[1],
+              border: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: textPrimary,
+              }}
+            >
+              Recent Updates
+            </h2>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {updates.map((u) => (
+                <div
+                  key={u.id}
+                  style={{
+                    borderLeft: `4px solid ${
+                      u.severity === "High"
+                        ? theme.palette.error.main
+                        : u.severity === "Medium"
+                        ? theme.palette.warning.main
+                        : theme.palette.success.main
+                    }`,
+                    paddingLeft: 12,
+                    paddingTop: 8,
+                    paddingBottom: 8,
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between" }}
+                  >
+                    <h3
+                      style={{ margin: 0, fontWeight: 700, color: textPrimary }}
+                    >
+                      {u.title}
+                    </h3>
+                    <span style={{ fontWeight: 700 }}>{u.severity}</span>
+                  </div>
+                  <p style={{ margin: "6px 0 0 0", color: textSecondary }}>
+                    {u.description}
+                  </p>
+                  <p style={{ margin: 0, color: textSecondary, fontSize: 12 }}>
+                    {u.time}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent Communications */}
+          <div
+            style={{
+              background: panelBg,
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: theme.shadows[1],
+              border: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: textPrimary,
+              }}
+            >
+              Recent Communications
+            </h2>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {communications.map((comm) => (
+                <div
+                  key={comm.id}
+                  style={{
+                    borderTop: `1px solid ${subtleBorder}`,
+                    paddingTop: 8,
+                  }}
+                >
+                  <h3
+                    style={{ margin: 0, fontWeight: 700, color: textPrimary }}
+                  >
+                    {comm.title}
+                  </h3>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      color: textSecondary,
+                      marginTop: 6,
+                    }}
+                  >
+                    <span>{comm.time}</span>
+                    <span>{comm.recipients} recipients</span>
+                    <span
+                      style={{
+                        color:
+                          comm.status === "Delivered"
+                            ? theme.palette.success.main
+                            : theme.palette.warning.main,
+                      }}
+                    >
+                      {comm.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
+      {/* Route details modal (preserves your layout) */}
       {showRouteDetails && (
         <div
           style={{
@@ -407,26 +2143,184 @@ export default function SafeRoutes() {
         >
           <div
             style={{
-              background: bgColor,
+              background: panelBg,
               borderRadius: 12,
               padding: 20,
               width: "min(900px, 95%)",
-              boxShadow: muiTheme.shadows[12],
+              boxShadow: theme.shadows[12],
               border: `1px solid ${subtleBorder}`,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontWeight: 700, color: textColor }}>Route Details</h3>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <h3 style={{ margin: 0, fontWeight: 700, color: textPrimary }}>
+                Route Details
+              </h3>
               <button
                 onClick={() => setShowRouteDetails(null)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: textColor }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: textPrimary,
+                }}
               >
                 <X size={18} />
               </button>
             </div>
+
+            {routes.find((r) => r.id === showRouteDetails) && (
+              <div
+                style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 13, color: textSecondary }}>
+                    Route Name
+                  </h4>
+                  <p
+                    style={{
+                      marginTop: 6,
+                      fontWeight: 700,
+                      color: textPrimary,
+                    }}
+                  >
+                    {routes.find((r) => r.id === showRouteDetails)?.name}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 13, color: textSecondary }}>
+                    District
+                  </h4>
+                  <p style={{ marginTop: 6, color: textPrimary }}>
+                    {routes.find((r) => r.id === showRouteDetails)?.district}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 13, color: textSecondary }}>
+                    Status
+                  </h4>
+                  <p
+                    style={{
+                      marginTop: 6,
+                      color:
+                        routes.find((r) => r.id === showRouteDetails)
+                          ?.status === "Open"
+                          ? String(theme.palette.success.main)
+                          : routes.find((r) => r.id === showRouteDetails)
+                              ?.status === "Warning"
+                          ? String(theme.palette.warning.main)
+                          : String(theme.palette.error.main),
+                    }}
+                  >
+                    {routes.find((r) => r.id === showRouteDetails)?.status}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 13, color: textSecondary }}>
+                    Last Updated
+                  </h4>
+                  <p style={{ marginTop: 6, color: textPrimary }}>
+                    {routes.find((r) => r.id === showRouteDetails)?.updated}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 13, color: textSecondary }}>
+                    Traffic Conditions
+                  </h4>
+                  <p style={{ marginTop: 6, color: textPrimary }}>
+                    {routes.find((r) => r.id === showRouteDetails)?.status ===
+                    "Open"
+                      ? "Clear traffic, route is fully operational"
+                      : routes.find((r) => r.id === showRouteDetails)
+                          ?.status === "Warning"
+                      ? "Heavy traffic, expect delays"
+                      : "Route closed due to flooding"}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      const route = routes.find(
+                        (r) => r.id === showRouteDetails
+                      );
+                      if (route)
+                        addAlert({
+                          title: "Route Shared",
+                          message: `You've shared information about ${route.name}`,
+                          type: "info",
+                        });
+                      setShowRouteDetails(null);
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: `1px solid ${subtleBorder}`,
+                      background: "transparent",
+                      color: textPrimary,
+                    }}
+                  >
+                    Share
+                  </button>
+                  <button
+                    onClick={() => {
+                      const route = routes.find(
+                        (r) => r.id === showRouteDetails
+                      );
+                      if (route) {
+                        setMapCenter(route.startPoint);
+                        setMapZoom(14);
+                        const newUpdate: Update = {
+                          id: `update${updates.length + 1}`,
+                          time: new Date().toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }),
+                          title: `Navigation to ${route.name}`,
+                          description: `Navigation started to ${route.district} via ${route.name}`,
+                          severity: "Low",
+                        };
+                        setUpdates([newUpdate, ...updates]);
+                      }
+                      setShowRouteDetails(null);
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: theme.palette.primary.main,
+                      color: theme.palette.primary.contrastText,
+                    }}
+                  >
+                    <Navigation
+                      size={16}
+                      style={{ verticalAlign: "middle", marginRight: 6 }}
+                    />
+                    Navigate
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
