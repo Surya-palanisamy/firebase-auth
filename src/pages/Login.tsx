@@ -3,10 +3,6 @@ import ThemeToggler from "../components/ThemeToggler";
 import AppTheme from "../shared-theme/AppTheme";
 import Content from "./components/Content";
 import SignInCard from "./components/SignInCard";
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { getFirebaseAuth } from "../firebase/client"
-import { useAuth } from "../hooks/useAuth"
-import { useTheme } from "../context/ThemeContext"
 
 export default function SignInSide(props: { disableCustomTheme?: boolean }) {
   return (
