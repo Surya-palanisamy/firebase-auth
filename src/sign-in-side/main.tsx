@@ -1,4 +1,4 @@
-// components/SignInCard.tsx
+
 "use client";
 
 import React from "react";
@@ -18,9 +18,9 @@ import { styled } from "@mui/material/styles";
 import * as ReactHooks from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { getFirebaseAuth } from "../../firebase/client";
-import ForgotPassword from "./ForgotPassword";
-import { GoogleIcon, SitemarkIcon } from "./CustomIcons";
+import { getFirebaseAuth } from "../firebase/client";
+import ForgotPassword from "./components/ForgotPassword";
+import { GoogleIcon, SitemarkIcon } from "./components/CustomIcons";
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
