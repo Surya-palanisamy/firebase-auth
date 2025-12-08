@@ -95,7 +95,11 @@ export default function Signup() {
       const db = getFirebaseDb();
 
       // Create account
-      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const userCred = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
       const firebaseUser: FirebaseUser = userCred.user;
 
       let base64Avatar: string | null = null;
@@ -115,8 +119,8 @@ export default function Signup() {
         uid: firebaseUser.uid,
         fullName: name,
         email,
-        phone,                     // ✅ STORE PHONE
-        avatar: base64Avatar,      // base64 image
+        phone, // ✅ STORE PHONE
+        avatar: base64Avatar, // base64 image
         role: "User",
         createdAt: serverTimestamp(),
       });
@@ -146,7 +150,9 @@ export default function Signup() {
           p: 4,
           boxShadow: 3,
           borderRadius: 2,
-          backgroundColor: isDarkMode ? "background.paper" : "background.default",
+          backgroundColor: isDarkMode
+            ? "background.paper"
+            : "background.default",
         }}
       >
         <Typography variant="h4" fontWeight="bold" mb={1}>
@@ -181,14 +187,20 @@ export default function Signup() {
                 setAvatarFile(file);
               }}
             />
-            <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>
+            <Button
+              variant="outlined"
+              onClick={() => fileInputRef.current?.click()}
+            >
               {avatarFile ? "Change Avatar" : "Choose Avatar"}
             </Button>
           </div>
         </Box>
 
-        <Box component="form" onSubmit={handleSignup} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-
+        <Box
+          component="form"
+          onSubmit={handleSignup}
+          sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+        >
           <Typography fontWeight="600">Full Name</Typography>
           <TextField
             placeholder="Your name"
@@ -196,15 +208,14 @@ export default function Signup() {
             onChange={(e) => setName(e.target.value)}
             size="small"
           />
-
-          <Typography fontWeight="600">Phone Number</Typography> {/* ✅ NEW FIELD */}
+          <Typography fontWeight="600">Phone Number</Typography>{" "}
+          {/* ✅ NEW FIELD */}
           <TextField
             placeholder="1234567890"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             size="small"
           />
-
           <Typography fontWeight="600">Email</Typography>
           <TextField
             placeholder="your@email.com"
@@ -213,7 +224,6 @@ export default function Signup() {
             onChange={(e) => setEmail(e.target.value)}
             size="small"
           />
-
           <Typography fontWeight="600">Password</Typography>
           <TextField
             placeholder="••••••••"
@@ -222,7 +232,6 @@ export default function Signup() {
             onChange={(e) => setPassword(e.target.value)}
             size="small"
           />
-
           <Typography fontWeight="600">Confirm Password</Typography>
           <TextField
             placeholder="••••••••"
@@ -231,8 +240,13 @@ export default function Signup() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             size="small"
           />
-
-          <Button type="submit" variant="contained" disabled={loading} fullWidth sx={{ py: 1.5, fontWeight: "bold" }}>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={loading}
+            fullWidth
+            sx={{ py: 1.5, fontWeight: "bold" }}
+          >
             {loading ? <CircularProgress size={24} /> : "Create Account"}
           </Button>
         </Box>

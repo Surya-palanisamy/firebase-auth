@@ -1,9 +1,4 @@
-// -------------------------
-//  DASHBOARD (Optimized)
-// -------------------------
-
 import {
-  alpha,
   Box,
   Button,
   Card,
@@ -20,14 +15,14 @@ import {
   Stack,
   TextField,
   Typography,
-  useTheme,
+  useTheme
 } from "@mui/material";
 import React, {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useState,
-  useCallback,
 } from "react";
 
 import Tooltip, { tooltipClasses, TooltipProps } from "@mui/material/Tooltip";
@@ -39,9 +34,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  Droplets,
-  MapPin,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 
 import axios from "axios";

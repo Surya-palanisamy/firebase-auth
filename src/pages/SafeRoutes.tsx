@@ -911,7 +911,7 @@ export default function SafeRoutes() {
     });
   };
 
-  if (isLoading) return <LoadingSpinner  />;
+  if (isLoading) return <LoadingSpinner />;
 
   /* ---------- Theme colors helpers (do not alter layout) ---------- */
   const panelBg = theme.palette.background.paper;

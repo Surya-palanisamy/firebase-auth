@@ -172,7 +172,7 @@ export default function EmergencyHelp() {
   };
 
   if (isLoading) {
-    return <LoadingSpinner  />;
+    return <LoadingSpinner />;
   }
 
   return (
@@ -382,11 +382,7 @@ export default function EmergencyHelp() {
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow
-                  sx={{
-                  
-                  }}
-                >
+                <TableRow sx={{}}>
                   <TableCell>Team IDs</TableCell>
                   <TableCell>Team Name</TableCell>
                   <TableCell>Location</TableCell>

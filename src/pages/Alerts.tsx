@@ -1,41 +1,41 @@
-import { useState, type FormEvent } from "react";
-import {
-  Bell,
-  AlertTriangle,
-  Info,
-  Trash2,
-  Edit,
-  Send,
-  Users,
-  Bot,
-  MessageSquare,
-  RefreshCw,
-} from "lucide-react";
 import {
   Box,
   Button,
   Card,
   CardContent,
-  Typography,
-  Stack,
-  TextField,
+  Chip,
+  CircularProgress,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Chip,
-  CircularProgress,
+  TextField,
+  Typography,
   useTheme,
-  IconButton,
 } from "@mui/material";
-import { useAppContext } from "../context/AppContext";
+import {
+  AlertTriangle,
+  Bell,
+  Bot,
+  Edit,
+  Info,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { useState, type FormEvent } from "react";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useAppContext } from "../context/AppContext";
 
 export default function Alerts() {
   const { isLoading, refreshData, sendEmergencyBroadcast, addAlert } =
@@ -201,7 +201,7 @@ export default function Alerts() {
   };
 
   if (isLoading) {
-    return <LoadingSpinner  />;
+    return <LoadingSpinner />;
   }
 
   const getStatusColor = (status: string) => {

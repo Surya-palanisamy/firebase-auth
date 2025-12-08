@@ -1,7 +1,7 @@
 // LoadingSpinnerModern.tsx
-import React from "react";
-import { Backdrop, Box, Paper, Typography, useTheme } from "@mui/material";
 import { keyframes } from "@emotion/react";
+import { Backdrop, Box, Paper, Typography, useTheme } from "@mui/material";
+import React from "react";
 
 interface Props {
   size?: "sm" | "md" | "lg" | number;

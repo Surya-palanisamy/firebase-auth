@@ -1450,7 +1450,7 @@ export default function MapView() {
   }
 
   if (isLoading) {
-    return <LoadingSpinner  />;
+    return <LoadingSpinner />;
   }
 
   return (

@@ -1,5 +1,6 @@
 // src/context/AppContext.tsx
 "use client";
+
 import React, {
   createContext,
   useContext,
@@ -9,14 +10,10 @@ import React, {
 } from "react";
 
 import type { User as FirebaseUser } from "firebase/auth";
-import { doc, serverTimestamp, setDoc, getDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/client";
 import { useAuth } from "../hooks/useAuth";
-import {
-  floodProneAreas,
-  generateMockAlerts,
-  tamilNaduDistricts,
-} from "../services/mapService";
+import { generateMockAlerts } from "../services/mapService";
 
 /* ---------------- USER TYPE ---------------- */
 export interface User {
@@ -48,15 +45,22 @@ interface AppContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   alerts: Alert[];
+
   refreshData: () => Promise<void>;
   logout: () => Promise<void>;
+
+  /* Notifications API */
+  addAlert: (alert: Omit<Alert, "id" | "timestamp" | "read">) => void;
+  sendEmergencyBroadcast: (message: string, district?: string) => Promise<void>;
+  markAlertAsRead: (id: string) => void;
+  clearAllAlerts: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 /* ==========================================================
                       PROVIDER
-   ========================================================== */
+========================================================== */
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { user: authUser, loading: authLoading, logOut } = useAuth();
 
@@ -71,7 +75,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       const generated = generateMockAlerts();
 
-      const notifications: Alert[] = generated.map((a: any, i: number) => ({
+      const notificationList: Alert[] = generated.map((a: any, i: number) => ({
         id: `A${String(i + 1).padStart(3, "0")}`,
         title: a.type,
         message: a.description,
@@ -89,14 +93,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         coordinates: a.coordinates,
       }));
 
-      setAlerts(notifications);
+      setAlerts(notificationList);
       setIsLoading(false);
     };
 
     void load();
   }, []);
 
-  /* ---------------- SYNC FIREBASE AUTH USER INTO APP USER ---------------- */
+  /* ---------------- SYNC FIREBASE USER ---------------- */
   useEffect(() => {
     const sync = async () => {
       setIsLoading(true);
@@ -113,13 +117,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setUser({
           id: authUser.uid,
           name: authUser.displayName ?? "User",
-          email: authUser.email ?? "unknown@example.com",
+          email: authUser.email ?? "",
           role: authUser.role ?? "User",
           avatar,
           phone: authUser.phone ?? null,
         });
       } catch (err) {
-        console.error("AppContext sync user error:", err);
+        console.error("User sync error:", err);
       }
 
       setIsLoading(false);
@@ -128,48 +132,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     void sync();
   }, [authUser]);
 
-  /* ---------------- SAVE USER IN FIRESTORE (USED ON SIGNUP) ---------------- */
-  const saveUserToFirestore = async (
-    fbUser: FirebaseUser | null,
-    extra: Partial<User> = {}
-  ) => {
-    if (!fbUser) return;
-    try {
-      const db = getFirebaseDb();
-      const ref = doc(db, "users", fbUser.uid);
-
-      await setDoc(
-        ref,
-        {
-          uid: fbUser.uid,
-          fullName: fbUser.displayName ?? extra.name ?? "User",
-          email: fbUser.email ?? extra.email ?? null,
-          photoBase64: extra.avatar ?? null,
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-    } catch (err) {
-      console.warn("Failed to save user:", err);
-    }
-  };
-
-  /* ---------------- DATA REFRESH ---------------- */
-  const refreshData = async () => {
-    setIsLoading(true);
-    await new Promise((res) => setTimeout(res, 700));
-    setIsLoading(false);
-  };
-
-  /* ---------------- LOGOUT FUNCTION ---------------- */
+  /* ---------------- LOGOUT ---------------- */
   const logout = async () => {
     try {
-      await logOut(); // firebase logout
+      await logOut();
     } catch (err) {
       console.warn("Logout error:", err);
     }
+    setUser(null);
+  };
 
-    setUser(null); // clear user context
+  /* ---------------- ALERTS API ---------------- */
+
+  const addAlert = (alert: Omit<Alert, "id" | "timestamp" | "read">) => {
+    const newAlert: Alert = {
+      ...alert,
+      id: `A${String(alerts.length + 1).padStart(3, "0")}`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+
+    setAlerts((prev) => [newAlert, ...prev]);
+  };
+
+  const markAlertAsRead = (id: string) => {
+    setAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, read: true } : a))
+    );
+  };
+
+  const clearAllAlerts = () => setAlerts([]);
+
+  const sendEmergencyBroadcast = async (message: string, district?: string) => {
+    await new Promise((res) => setTimeout(res, 800));
+
+    addAlert({
+      title: "Emergency Broadcast",
+      message: district ? `[${district}] ${message}` : message,
+      type: "error",
+    });
+  };
+
+  /* ---------------- REFRESH DATA ---------------- */
+  const refreshData = async () => {
+    setIsLoading(true);
+    await new Promise((r) => setTimeout(r, 800));
+    setIsLoading(false);
   };
 
   /* ---------------- CONTEXT VALUE ---------------- */
@@ -178,8 +186,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated: !!user,
     isLoading: isLoading || authLoading,
     alerts,
+
     refreshData,
     logout,
+
+    addAlert,
+    sendEmergencyBroadcast,
+    markAlertAsRead,
+    clearAllAlerts,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

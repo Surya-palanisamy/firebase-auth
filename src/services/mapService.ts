@@ -1,13 +1,17 @@
-import L from "leaflet"
-import "leaflet-routing-machine"
+import L from "leaflet";
+import "leaflet-routing-machine";
 
 // Initialize Leaflet map
-export function initializeMap(elementId: string, center: [number, number] = [11.1271, 78.6569], zoom = 7) {
+export function initializeMap(
+  elementId: string,
+  center: [number, number] = [11.1271, 78.6569],
+  zoom = 7
+) {
   // Make sure the element exists
-  const mapElement = document.getElementById(elementId)
+  const mapElement = document.getElementById(elementId);
   if (!mapElement) {
-    console.error(`Map element with id ${elementId} not found`)
-    return null
+    console.error(`Map element with id ${elementId} not found`);
+    return null;
   }
 
   // Create the map
@@ -16,26 +20,31 @@ export function initializeMap(elementId: string, center: [number, number] = [11.
     attributionControl: true,
     minZoom: 6,
     maxZoom: 18,
-  }).setView(center, zoom)
+  }).setView(center, zoom);
 
   // Add zoom control to the top-right
   L.control
     .zoom({
       position: "topright",
     })
-    .addTo(map)
+    .addTo(map);
 
   // Add OpenStreetMap tile layer
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
-  }).addTo(map)
+  }).addTo(map);
 
-  return map
+  return map;
 }
 
 // Add a marker to the map
-export function addMarker(map: L.Map, position: [number, number], options: L.MarkerOptions = {}) {
+export function addMarker(
+  map: L.Map,
+  position: [number, number],
+  options: L.MarkerOptions = {}
+) {
   const defaultIcon = L.icon({
     iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
     shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
@@ -43,9 +52,9 @@ export function addMarker(map: L.Map, position: [number, number], options: L.Mar
     iconAnchor: [12, 41],
     popupAnchor: [1, -34],
     shadowSize: [41, 41],
-  })
+  });
 
-  return L.marker(position, { icon: defaultIcon, ...options }).addTo(map)
+  return L.marker(position, { icon: defaultIcon, ...options }).addTo(map);
 }
 
 // Add a circle to the map (for flood zones)
@@ -53,27 +62,41 @@ export function addFloodZone(
   map: L.Map,
   position: [number, number],
   radius: number,
-  options: L.CircleOptions = { color: "blue", fillColor: "#30c", fillOpacity: 0.2, radius: 100 },
+  options: L.CircleOptions = {
+    color: "blue",
+    fillColor: "#30c",
+    fillOpacity: 0.2,
+    radius: 100,
+  }
 ) {
-  return L.circle(position, { radius, ...options }).addTo(map)
+  return L.circle(position, { radius, ...options }).addTo(map);
 }
 
 // Add a polyline to the map (for routes)
 export function addRoute(
   map: L.Map,
   points: [number, number][],
-  options: L.PolylineOptions = { color: "green", weight: 5 },
+  options: L.PolylineOptions = { color: "green", weight: 5 }
 ) {
-  return L.polyline(points, options).addTo(map)
+  return L.polyline(points, options).addTo(map);
 }
 
 // Create a popup
-export function createPopup(map: L.Map, position: [number, number], content: string) {
-  return L.popup().setLatLng(position).setContent(content).openOn(map)
+export function createPopup(
+  map: L.Map,
+  position: [number, number],
+  content: string
+) {
+  return L.popup().setLatLng(position).setContent(content).openOn(map);
 }
 
 // Calculate and display route between two points using Leaflet Routing Machine
-export function calculateRoute(map: L.Map, start: [number, number], end: [number, number], color = "blue") {
+export function calculateRoute(
+  map: L.Map,
+  start: [number, number],
+  end: [number, number],
+  color = "blue"
+) {
   // Create custom line style based on route color
   const createPlan = () =>
     L.Routing.plan([L.latLng(start), L.latLng(end)], {
@@ -85,16 +108,17 @@ export function calculateRoute(map: L.Map, start: [number, number], end: [number
               i === 0
                 ? "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png"
                 : "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-            shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+            shadowUrl:
+              "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
             iconSize: [25, 41],
             iconAnchor: [12, 41],
             popupAnchor: [1, -34],
             shadowSize: [41, 41],
           }),
-        })
-        return marker
+        });
+        return marker;
       },
-    })
+    });
 
   // Create routing control with custom styling
   const routingControl = L.Routing.control({
@@ -120,37 +144,42 @@ export function calculateRoute(map: L.Map, start: [number, number], end: [number
         { color: "blue", opacity: 0.5, weight: 2 },
       ],
     },
-  }).addTo(map)
+  }).addTo(map);
 
   // Hide the routing instructions
-  const container = routingControl.getContainer()
+  const container = routingControl.getContainer();
   if (container) {
-    container.style.display = "none"
+    container.style.display = "none";
   }
 
-  return routingControl
+  return routingControl;
 }
 
 // Get route between two points (simplified for demo)
-export function getRoute(start: [number, number], end: [number, number]): [number, number][] {
+export function getRoute(
+  start: [number, number],
+  end: [number, number]
+): [number, number][] {
   // In a real app, this would call a routing API
   // For demo, we'll just create a simple route with a few points
   const midPoint: [number, number] = [
     (start[0] + end[0]) / 2 + (Math.random() * 0.01 - 0.005),
     (start[1] + end[1]) / 2 + (Math.random() * 0.01 - 0.005),
-  ]
+  ];
 
-  return [start, midPoint, end]
+  return [start, midPoint, end];
 }
 
 // Get flood risk level for a location (simplified for demo)
-export function getFloodRiskLevel(position: [number, number]): "Low" | "Medium" | "High" {
+export function getFloodRiskLevel(
+  position: [number, number]
+): "Low" | "Medium" | "High" {
   // In a real app, this would call an API or use stored data
   // For demo, we'll use a simple random function
-  const random = Math.random()
-  if (random < 0.3) return "Low"
-  if (random < 0.7) return "Medium"
-  return "High"
+  const random = Math.random();
+  if (random < 0.3) return "Low";
+  if (random < 0.7) return "Medium";
+  return "High";
 }
 
 // Tamil Nadu districts data
@@ -204,7 +233,7 @@ export const tamilNaduDistricts = [
   { name: "Sholinganallur", coordinates: [12.901, 80.2279] },
   { name: "Guindy", coordinates: [13.0067, 80.2206] },
   { name: "Mylapore", coordinates: [13.0368, 80.2676] },
-]
+];
 
 // Tamil Nadu localities/areas data
 export const tamilNaduLocalities = {
@@ -220,48 +249,128 @@ export const tamilNaduLocalities = {
     "Chennai Central",
     "Sholinganallur",
   ],
-  Coimbatore: ["Peelamedu", "R.S. Puram", "Singanallur", "Saibaba Colony", "Ganapathy"],
-  Madurai: ["Goripalayam", "Mattuthavani", "Tirupparankundram", "Anaiyur", "Vilangudi"],
-  Tiruchirappalli: ["Srirangam", "Thillai Nagar", "Woraiyur", "K.K. Nagar", "Ariyamangalam"],
-  Salem: ["Hasthampatti", "Fairlands", "Alagapuram", "Kondalampatti", "Suramangalam"],
+  Coimbatore: [
+    "Peelamedu",
+    "R.S. Puram",
+    "Singanallur",
+    "Saibaba Colony",
+    "Ganapathy",
+  ],
+  Madurai: [
+    "Goripalayam",
+    "Mattuthavani",
+    "Tirupparankundram",
+    "Anaiyur",
+    "Vilangudi",
+  ],
+  Tiruchirappalli: [
+    "Srirangam",
+    "Thillai Nagar",
+    "Woraiyur",
+    "K.K. Nagar",
+    "Ariyamangalam",
+  ],
+  Salem: [
+    "Hasthampatti",
+    "Fairlands",
+    "Alagapuram",
+    "Kondalampatti",
+    "Suramangalam",
+  ],
   "All Districts": ["All Localities"],
-}
+};
 
 // Get all localities as a flat array
 export function getAllLocalities() {
-  const allLocalities: string[] = []
+  const allLocalities: string[] = [];
   Object.values(tamilNaduLocalities).forEach((localities) => {
     localities.forEach((locality) => {
       if (!allLocalities.includes(locality) && locality !== "All Localities") {
-        allLocalities.push(locality)
+        allLocalities.push(locality);
       }
-    })
-  })
-  return allLocalities
+    });
+  });
+  return allLocalities;
 }
 
 // Tamil Nadu flood-prone areas (for demo)
 export const floodProneAreas = [
-  { name: "Adyar River Basin", district: "Chennai", coordinates: [13.0067, 80.2565], riskLevel: "High" },
-  { name: "Cooum River Area", district: "Chennai", coordinates: [13.0756, 80.261], riskLevel: "Critical" },
-  { name: "Velachery", district: "Chennai", coordinates: [12.9815, 80.2176], riskLevel: "High" },
-  { name: "Mudichur", district: "Chennai", coordinates: [12.9107, 80.0689], riskLevel: "Critical" },
-  { name: "Vaigai River Basin", district: "Madurai", coordinates: [9.9252, 78.1198], riskLevel: "Medium" },
-  { name: "Cauvery River Delta", district: "Thanjavur", coordinates: [10.787, 79.1378], riskLevel: "High" },
-  { name: "Thamirabarani River", district: "Tirunelveli", coordinates: [8.7139, 77.7567], riskLevel: "Medium" },
-  { name: "Bhavani River", district: "Erode", coordinates: [11.341, 77.7172], riskLevel: "Medium" },
-  { name: "Palar River Basin", district: "Vellore", coordinates: [12.9165, 79.1325], riskLevel: "Low" },
-  { name: "Noyyal River", district: "Coimbatore", coordinates: [11.0168, 76.9558], riskLevel: "Medium" },
-]
+  {
+    name: "Adyar River Basin",
+    district: "Chennai",
+    coordinates: [13.0067, 80.2565],
+    riskLevel: "High",
+  },
+  {
+    name: "Cooum River Area",
+    district: "Chennai",
+    coordinates: [13.0756, 80.261],
+    riskLevel: "Critical",
+  },
+  {
+    name: "Velachery",
+    district: "Chennai",
+    coordinates: [12.9815, 80.2176],
+    riskLevel: "High",
+  },
+  {
+    name: "Mudichur",
+    district: "Chennai",
+    coordinates: [12.9107, 80.0689],
+    riskLevel: "Critical",
+  },
+  {
+    name: "Vaigai River Basin",
+    district: "Madurai",
+    coordinates: [9.9252, 78.1198],
+    riskLevel: "Medium",
+  },
+  {
+    name: "Cauvery River Delta",
+    district: "Thanjavur",
+    coordinates: [10.787, 79.1378],
+    riskLevel: "High",
+  },
+  {
+    name: "Thamirabarani River",
+    district: "Tirunelveli",
+    coordinates: [8.7139, 77.7567],
+    riskLevel: "Medium",
+  },
+  {
+    name: "Bhavani River",
+    district: "Erode",
+    coordinates: [11.341, 77.7172],
+    riskLevel: "Medium",
+  },
+  {
+    name: "Palar River Basin",
+    district: "Vellore",
+    coordinates: [12.9165, 79.1325],
+    riskLevel: "Low",
+  },
+  {
+    name: "Noyyal River",
+    district: "Coimbatore",
+    coordinates: [11.0168, 76.9558],
+    riskLevel: "Medium",
+  },
+];
 
 // Generate mock alerts based on flood-prone areas
 export function generateMockAlerts() {
   return floodProneAreas
     .filter(() => Math.random() > 0.5)
     .map((area, index) => {
-      const timeAgo = Math.floor(Math.random() * 60) + 5
-      const alertTypes = ["Flash Flood Warning", "Water Level Rising", "Heavy Rainfall Alert", "Dam Release Warning"]
-      const alertType = alertTypes[Math.floor(Math.random() * alertTypes.length)]
+      const timeAgo = Math.floor(Math.random() * 60) + 5;
+      const alertTypes = [
+        "Flash Flood Warning",
+        "Water Level Rising",
+        "Heavy Rainfall Alert",
+        "Dam Release Warning",
+      ];
+      const alertType =
+        alertTypes[Math.floor(Math.random() * alertTypes.length)];
 
       return {
         id: `alert-${index}`,
@@ -272,78 +381,113 @@ export function generateMockAlerts() {
         time: `${timeAgo} mins ago`,
         coordinates: area.coordinates as [number, number],
         description: `${alertType} issued for ${area.name} in ${area.district} district. Take necessary precautions.`,
-      }
-    })
+      };
+    });
 }
 
 // Generate multiple route options with different risk levels
-export function generateMultipleRoutes(map: L.Map, start: [number, number], end: [number, number]) {
+export function generateMultipleRoutes(
+  map: L.Map,
+  start: [number, number],
+  end: [number, number]
+) {
   // Clear existing routes if any
   map.eachLayer((layer) => {
-    if (layer instanceof L.Polyline && !(layer instanceof L.Rectangle) && !(layer instanceof L.Circle)) {
-      map.removeLayer(layer)
+    if (
+      layer instanceof L.Polyline &&
+      !(layer instanceof L.Rectangle) &&
+      !(layer instanceof L.Circle)
+    ) {
+      map.removeLayer(layer);
     }
-  })
+  });
 
   // Generate three different routes with varying risk levels
   const routes = [
     {
       risk: "high",
       color: "red",
-      waypoints: [start, [(start[0] + end[0]) / 2 + 0.05, (start[1] + end[1]) / 2 + 0.05], end],
+      waypoints: [
+        start,
+        [(start[0] + end[0]) / 2 + 0.05, (start[1] + end[1]) / 2 + 0.05],
+        end,
+      ],
     },
     {
       risk: "medium",
       color: "orange",
-      waypoints: [start, [(start[0] + end[0]) / 2 - 0.02, (start[1] + end[1]) / 2], end],
+      waypoints: [
+        start,
+        [(start[0] + end[0]) / 2 - 0.02, (start[1] + end[1]) / 2],
+        end,
+      ],
     },
     {
       risk: "low",
       color: "green",
-      waypoints: [start, [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 - 0.05], end],
+      waypoints: [
+        start,
+        [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2 - 0.05],
+        end,
+      ],
     },
-  ]
+  ];
 
   // Draw all routes with their respective colors
-  const polylines: L.Polyline[] = []
+  const polylines: L.Polyline[] = [];
   routes.forEach((route) => {
     // Create polylines for each route with appropriate color
     const polyline = L.polyline(route.waypoints as L.LatLngExpression[], {
       color: route.color,
       weight: route.risk === "high" ? 3 : route.risk === "medium" ? 4 : 5,
       opacity: 0.8,
-      dashArray: route.risk === "high" ? "5, 10" : route.risk === "medium" ? "5, 5" : undefined,
-    }).addTo(map)
+      dashArray:
+        route.risk === "high"
+          ? "5, 10"
+          : route.risk === "medium"
+          ? "5, 5"
+          : undefined,
+    }).addTo(map);
 
     // Add popup to show risk level when clicked
-    polyline.bindPopup(`<b>${route.risk.charAt(0).toUpperCase() + route.risk.slice(1)} Risk Route</b>`)
-    polylines.push(polyline)
-  })
+    polyline.bindPopup(
+      `<b>${
+        route.risk.charAt(0).toUpperCase() + route.risk.slice(1)
+      } Risk Route</b>`
+    );
+    polylines.push(polyline);
+  });
 
-  return polylines
+  return polylines;
 }
 
 // Assess route risk level
-export function assessRouteRisk(startPoint: [number, number], endPoint: [number, number]): "high" | "medium" | "low" {
+export function assessRouteRisk(
+  startPoint: [number, number],
+  endPoint: [number, number]
+): "high" | "medium" | "low" {
   // In a real app, this would use actual risk data
   // For demo purposes, we'll use a simple algorithm based on coordinates
 
   // Calculate distance between points (simplified)
-  const distance = Math.sqrt(Math.pow(startPoint[0] - endPoint[0], 2) + Math.pow(startPoint[1] - endPoint[1], 2))
+  const distance = Math.sqrt(
+    Math.pow(startPoint[0] - endPoint[0], 2) +
+      Math.pow(startPoint[1] - endPoint[1], 2)
+  );
 
   // Generate risk based on distance and some randomness
-  const random = Math.random()
+  const random = Math.random();
 
   if (distance > 0.5) {
-    return random < 0.6 ? "high" : "medium"
+    return random < 0.6 ? "high" : "medium";
   } else if (distance > 0.2) {
-    return random < 0.3 ? "high" : random < 0.7 ? "medium" : "low"
+    return random < 0.3 ? "high" : random < 0.7 ? "medium" : "low";
   } else {
-    return random < 0.2 ? "medium" : "low"
+    return random < 0.2 ? "medium" : "low";
   }
 }
 
 // Get color for risk level
 export function getRiskColor(risk: "high" | "medium" | "low"): string {
-  return risk === "high" ? "red" : risk === "medium" ? "orange" : "green"
+  return risk === "high" ? "red" : risk === "medium" ? "orange" : "green";
 }

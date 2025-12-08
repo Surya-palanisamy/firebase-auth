@@ -1,4 +1,3 @@
-import React, { useState } from "react";
 import {
   Avatar,
   Box,
@@ -10,6 +9,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 type User = {

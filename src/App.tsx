@@ -139,7 +139,9 @@ function AppContent() {
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Droplets size={24} color={muiTheme.palette.primary.main} />
-          <span style={{ fontSize: "1.25rem", fontWeight: "bold" }}>FloodSense</span>
+          <span style={{ fontSize: "1.25rem", fontWeight: "bold" }}>
+            FloodSense
+          </span>
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -188,7 +190,10 @@ function AppContent() {
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Droplets size={24} color={muiTheme.palette.primary.main} />
-            <Box component="span" sx={{ fontSize: "1.25rem", fontWeight: "bold" }}>
+            <Box
+              component="span"
+              sx={{ fontSize: "1.25rem", fontWeight: "bold" }}
+            >
               FloodSense
             </Box>
           </Box>

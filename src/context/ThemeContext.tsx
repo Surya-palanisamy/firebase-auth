@@ -1,48 +1,69 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from "react"
-import { ThemeProvider, createTheme, CssBaseline } from "@mui/material"
-import type { PaletteMode } from "@mui/material"
-import { colorSchemes, typography, shadows, shape } from "../shared-theme/themePrimitives"
-import { inputsCustomizations } from "../shared-theme/customizations/inputs"
-import { dataDisplayCustomizations } from "../shared-theme/customizations/dataDisplay"
-import { feedbackCustomizations } from "../shared-theme/customizations/feedback"
-import { navigationCustomizations } from "../shared-theme/customizations/navigation"
-import { surfacesCustomizations } from "../shared-theme/customizations/surfaces"
+import type { PaletteMode } from "@mui/material";
+import { createTheme, CssBaseline, ThemeProvider } from "@mui/material";
+import type React from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { dataDisplayCustomizations } from "../shared-theme/customizations/dataDisplay";
+import { feedbackCustomizations } from "../shared-theme/customizations/feedback";
+import { inputsCustomizations } from "../shared-theme/customizations/inputs";
+import { navigationCustomizations } from "../shared-theme/customizations/navigation";
+import { surfacesCustomizations } from "../shared-theme/customizations/surfaces";
+import {
+  colorSchemes,
+  shadows,
+  shape,
+  typography,
+} from "../shared-theme/themePrimitives";
 
-type ThemeMode = PaletteMode | "system"
+type ThemeMode = PaletteMode | "system";
 
 interface ThemeContextType {
-  mode: ThemeMode
-  toggleTheme: () => void
-  setTheme: (mode: ThemeMode) => void
-  isDarkMode: boolean
+  mode: ThemeMode;
+  toggleTheme: () => void;
+  setTheme: (mode: ThemeMode) => void;
+  isDarkMode: boolean;
 }
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeContextProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const ThemeContextProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   // initialize mode: accept "light" | "dark" | "system"
   const [mode, setMode] = useState<ThemeMode>(() => {
     if (typeof window !== "undefined") {
-      const savedMode = localStorage.getItem("theme-mode")
-      if (savedMode && (savedMode === "light" || savedMode === "dark" || savedMode === "system")) {
-        return savedMode as ThemeMode
+      const savedMode = localStorage.getItem("theme-mode");
+      if (
+        savedMode &&
+        (savedMode === "light" ||
+          savedMode === "dark" ||
+          savedMode === "system")
+      ) {
+        return savedMode as ThemeMode;
       }
       // Default to system preference if nothing saved
-      return "system"
+      return "system";
     }
-    return "light"
-  })
+    return "light";
+  });
 
   // Helper to resolve "system" -> "light" | "dark"
   const resolveColorScheme = (m: ThemeMode) => {
     if (m === "system" && typeof window !== "undefined") {
-      return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+      return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
     }
-    return m === "system" ? "light" : m // fallback safe
-  }
+    return m === "system" ? "light" : m; // fallback safe
+  };
 
   // Create theme once (colorSchemes should contain both light/dark)
   const theme = useMemo(
@@ -64,37 +85,40 @@ export const ThemeContextProvider: React.FC<{ children: ReactNode }> = ({ childr
           ...surfacesCustomizations,
         },
       }),
-    [],
-  )
+    []
+  );
 
   // Apply resolved color-scheme to document and store preference
   const applyModeToDocument = (m: ThemeMode) => {
-    if (typeof window === "undefined") return
-    const resolved = resolveColorScheme(m)
-    document.documentElement.setAttribute("data-mui-color-scheme", resolved)
-  }
+    if (typeof window === "undefined") return;
+    const resolved = resolveColorScheme(m);
+    document.documentElement.setAttribute("data-mui-color-scheme", resolved);
+  };
 
   useEffect(() => {
     // initial apply
-    applyModeToDocument(mode)
+    applyModeToDocument(mode);
 
     // If mode is system, listen to OS preference changes and update attribute
     if (typeof window !== "undefined") {
-      const media = window.matchMedia?.("(prefers-color-scheme: dark)")
+      const media = window.matchMedia?.("(prefers-color-scheme: dark)");
       const handler = (e: MediaQueryListEvent | MediaQueryList) => {
         // Only update the attribute (don't override user's explicit light/dark)
         if (mode === "system") {
-          const resolved = e.matches ? "dark" : "light"
-          document.documentElement.setAttribute("data-mui-color-scheme", resolved)
+          const resolved = e.matches ? "dark" : "light";
+          document.documentElement.setAttribute(
+            "data-mui-color-scheme",
+            resolved
+          );
         }
-      }
+      };
 
       // Add listener (older and newer APIs)
       try {
         if (media?.addEventListener) {
-          media.addEventListener("change", handler as EventListener)
+          media.addEventListener("change", handler as EventListener);
         } else if (media?.addListener) {
-          media.addListener(handler as any)
+          media.addListener(handler as any);
         }
       } catch {
         /* ignore - defensive */
@@ -104,51 +128,54 @@ export const ThemeContextProvider: React.FC<{ children: ReactNode }> = ({ childr
       return () => {
         try {
           if (media?.removeEventListener) {
-            media.removeEventListener("change", handler as EventListener)
+            media.removeEventListener("change", handler as EventListener);
           } else if (media?.removeListener) {
-            media.removeListener(handler as any)
+            media.removeListener(handler as any);
           }
         } catch {
           /* ignore - defensive */
         }
-      }
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode])
+  }, [mode]);
 
   const toggleTheme = () => {
     setMode((prevMode) => {
       // toggling should flip between light/dark and store that explicit choice.
       // If currently system, resolve then toggle the resolved value.
-      const currentResolved = resolveColorScheme(prevMode)
-      const newResolved = currentResolved === "light" ? "dark" : "light"
+      const currentResolved = resolveColorScheme(prevMode);
+      const newResolved = currentResolved === "light" ? "dark" : "light";
       // persist explicit user choice (not "system")
       if (typeof window !== "undefined") {
-        localStorage.setItem("theme-mode", newResolved)
-        document.documentElement.setAttribute("data-mui-color-scheme", newResolved)
+        localStorage.setItem("theme-mode", newResolved);
+        document.documentElement.setAttribute(
+          "data-mui-color-scheme",
+          newResolved
+        );
       }
-      return newResolved
-    })
-  }
+      return newResolved;
+    });
+  };
 
   const setTheme = (newMode: ThemeMode) => {
-    setMode(newMode)
+    setMode(newMode);
     if (typeof window !== "undefined") {
-      localStorage.setItem("theme-mode", newMode)
+      localStorage.setItem("theme-mode", newMode);
       // store the chosen mode, but set attribute to resolved palette ("light" | "dark")
-      const resolved = resolveColorScheme(newMode)
-      document.documentElement.setAttribute("data-mui-color-scheme", resolved)
+      const resolved = resolveColorScheme(newMode);
+      document.documentElement.setAttribute("data-mui-color-scheme", resolved);
     }
-  }
+  };
 
-  const isDarkMode = resolveColorScheme(mode) === "dark"
+  const isDarkMode = resolveColorScheme(mode) === "dark";
 
   const value: ThemeContextType = {
     mode,
     toggleTheme,
     setTheme,
     isDarkMode,
-  }
+  };
 
   return (
     <ThemeContext.Provider value={value}>
@@ -157,13 +184,13 @@ export const ThemeContextProvider: React.FC<{ children: ReactNode }> = ({ childr
         {children}
       </ThemeProvider>
     </ThemeContext.Provider>
-  )
-}
+  );
+};
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext)
+  const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error("useTheme must be used within ThemeContextProvider")
+    throw new Error("useTheme must be used within ThemeContextProvider");
   }
-  return context
-}
+  return context;
+};

@@ -1,7 +1,6 @@
 // src/pages/SettingsPage.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -24,8 +23,9 @@ import {
   useTheme,
 } from "@mui/material";
 import { Camera, Check } from "lucide-react";
-import { resizeImageToDataURL } from "../utils/resizeImage";
+import React, { useEffect, useState } from "react";
 import { useSettings } from "../hooks/useSettings";
+import { resizeImageToDataURL } from "../utils/resizeImage";
 
 // ---------------- Tab Panel ----------------
 interface TabPanelProps {
@@ -86,8 +86,8 @@ function SettingsPageModernInner() {
   });
 
   // ---------------- Avatar ----------------
-  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined); 
-  const [avatarBase64, setAvatarBase64] = useState<string | null>(null); 
+  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -113,7 +113,6 @@ function SettingsPageModernInner() {
 
     // 🔥 FIXED: use photoBase64 (not photoURL)
     setAvatarSrc(settings.photoBase64 || undefined);
-
   }, [settings]);
 
   // ---------------- Avatar Upload ----------------
@@ -166,7 +165,8 @@ function SettingsPageModernInner() {
   const handleSaveProfile = async () => {
     setProfileError(null);
 
-    if (!accountForm.fullName.trim()) return setProfileError("Full name required");
+    if (!accountForm.fullName.trim())
+      return setProfileError("Full name required");
     if (!accountForm.email.trim()) return setProfileError("Email required");
 
     setSavingProfile(true);
@@ -268,7 +268,11 @@ function SettingsPageModernInner() {
                 alignItems="flex-start"
               >
                 {/* Avatar */}
-                <Stack alignItems="center" spacing={2} sx={{ width: { xs: "100%", md: 220 } }}>
+                <Stack
+                  alignItems="center"
+                  spacing={2}
+                  sx={{ width: { xs: "100%", md: 220 } }}
+                >
                   <Avatar
                     src={avatarSrc}
                     sx={{
@@ -313,11 +317,19 @@ function SettingsPageModernInner() {
                     onClick={handleSaveAvatar}
                     sx={{ textTransform: "none" }}
                   >
-                    {savingAvatar ? <CircularProgress size={18} /> : "Save Avatar"}
+                    {savingAvatar ? (
+                      <CircularProgress size={18} />
+                    ) : (
+                      "Save Avatar"
+                    )}
                   </Button>
 
                   {savedAvatar && (
-                    <Alert severity="success" icon={<Check size={18} />} sx={{ mt: 1 }}>
+                    <Alert
+                      severity="success"
+                      icon={<Check size={18} />}
+                      sx={{ mt: 1 }}
+                    >
                       Avatar Updated
                     </Alert>
                   )}
@@ -344,7 +356,10 @@ function SettingsPageModernInner() {
                       size="small"
                       value={accountForm.fullName}
                       onChange={(e) =>
-                        setAccountForm({ ...accountForm, fullName: e.target.value })
+                        setAccountForm({
+                          ...accountForm,
+                          fullName: e.target.value,
+                        })
                       }
                     />
 
@@ -354,7 +369,10 @@ function SettingsPageModernInner() {
                       size="small"
                       value={accountForm.email}
                       onChange={(e) =>
-                        setAccountForm({ ...accountForm, email: e.target.value })
+                        setAccountForm({
+                          ...accountForm,
+                          email: e.target.value,
+                        })
                       }
                     />
 
@@ -364,7 +382,10 @@ function SettingsPageModernInner() {
                       size="small"
                       value={accountForm.phone}
                       onChange={(e) =>
-                        setAccountForm({ ...accountForm, phone: e.target.value })
+                        setAccountForm({
+                          ...accountForm,
+                          phone: e.target.value,
+                        })
                       }
                     />
 
@@ -375,7 +396,9 @@ function SettingsPageModernInner() {
                         disabled={savingProfile || loading}
                         sx={{ textTransform: "none", px: 3 }}
                       >
-                        {savingProfile ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+                        {savingProfile ? (
+                          <CircularProgress size={18} sx={{ mr: 1 }} />
+                        ) : null}
                         Save Profile
                       </Button>
                     </Box>
@@ -408,12 +431,16 @@ function SettingsPageModernInner() {
                       disabled={savingPrefs || loading}
                       sx={{ textTransform: "none" }}
                     >
-                      {savingPrefs ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+                      {savingPrefs ? (
+                        <CircularProgress size={18} sx={{ mr: 1 }} />
+                      ) : null}
                       Save Preferences
                     </Button>
                   </Box>
 
-                  {savedPrefs && <Alert severity="success">Preferences Saved</Alert>}
+                  {savedPrefs && (
+                    <Alert severity="success">Preferences Saved</Alert>
+                  )}
                 </Stack>
               </Paper>
             </TabPanel>
@@ -422,7 +449,11 @@ function SettingsPageModernInner() {
             <TabPanel value={tabValue} index={2}>
               <Paper sx={{ p: 3, borderRadius: 2 }}>
                 <Stack spacing={3}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
                     <Box>
                       <Typography variant="subtitle1" fontWeight={600}>
                         Two-Factor Authentication

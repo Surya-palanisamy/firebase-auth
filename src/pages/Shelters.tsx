@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import {
   Box,
   Button,
@@ -18,65 +18,88 @@ import {
   TextField,
   Typography,
   useTheme,
-} from "@mui/material"
-import { Building2, MessageSquare, Phone, RefreshCw, Search } from "lucide-react"
-import { useState } from "react"
-import LoadingSpinner from "../components/LoadingSpinner"
-import { useAppContext } from "../context/AppContext"
+} from "@mui/material";
+import {
+  Building2,
+  MessageSquare,
+  Phone,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import { useState } from "react";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { useAppContext } from "../context/AppContext";
 
 export default function Shelters() {
-  const { shelters, coordinators, resources, refreshData, isLoading } = useAppContext()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [refreshing, setRefreshing] = useState(false)
-  const theme = useTheme()
+  const { shelters, coordinators, resources, refreshData, isLoading } =
+    useAppContext();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const theme = useTheme();
 
   const handleRefresh = async () => {
-    setRefreshing(true)
-    await refreshData()
-    setTimeout(() => setRefreshing(false), 1000)
-  }
+    setRefreshing(true);
+    await refreshData();
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
   const filteredShelters = shelters.filter(
     (shelter) =>
       shelter.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      shelter.location.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+      shelter.location.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const totalCapacity = shelters.reduce((total, shelter) => {
-    const [current, max] = shelter.capacity.split("/").map(Number)
-    return total + (max || 0)
-  }, 0)
+    const [current, max] = shelter.capacity.split("/").map(Number);
+    return total + (max || 0);
+  }, 0);
 
   const currentOccupancy = shelters.reduce((total, shelter) => {
-    const [current] = shelter.capacity.split("/").map(Number)
-    return total + (current || 0)
-  }, 0)
+    const [current] = shelter.capacity.split("/").map(Number);
+    return total + (current || 0);
+  }, 0);
 
-  const availableSpaces = totalCapacity - currentOccupancy
+  const availableSpaces = totalCapacity - currentOccupancy;
 
   const shelterStats = [
-    { title: "Total Active Shelters", value: shelters.length.toString(), icon: <Building2 size={24} /> },
-    { title: "Total Capacity", value: totalCapacity.toLocaleString(), icon: <Building2 size={24} /> },
-    { title: "Current Occupancy", value: currentOccupancy.toLocaleString(), icon: <Building2 size={24} /> },
-    { title: "Available Spaces", value: availableSpaces.toLocaleString(), icon: <Building2 size={24} /> },
-  ]
+    {
+      title: "Total Active Shelters",
+      value: shelters.length.toString(),
+      icon: <Building2 size={24} />,
+    },
+    {
+      title: "Total Capacity",
+      value: totalCapacity.toLocaleString(),
+      icon: <Building2 size={24} />,
+    },
+    {
+      title: "Current Occupancy",
+      value: currentOccupancy.toLocaleString(),
+      icon: <Building2 size={24} />,
+    },
+    {
+      title: "Available Spaces",
+      value: availableSpaces.toLocaleString(),
+      icon: <Building2 size={24} />,
+    },
+  ];
 
   if (isLoading) {
-    return <LoadingSpinner/>
+    return <LoadingSpinner />;
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Available":
-        return "success"
+        return "success";
       case "Near Full":
-        return "warning"
+        return "warning";
       case "Full":
-        return "error"
+        return "error";
       default:
-        return "default"
+        return "default";
     }
-  }
+  };
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -190,8 +213,7 @@ export default function Shelters() {
         <TableContainer sx={{ maxHeight: 440, bgcolor: "transparent" }}>
           <Table stickyHeader size="medium" aria-label="shelters table">
             <TableHead>
-              <TableRow
-              >
+              <TableRow>
                 <TableCell>Shelter Name</TableCell>
                 <TableCell>Location</TableCell>
                 <TableCell>Capacity</TableCell>
@@ -351,8 +373,7 @@ export default function Shelters() {
                     startIcon={<Phone size={16} />}
                     variant="outlined"
                     size="small"
-                    sx={{ flex: 1 ,color:"red"}}
-
+                    sx={{ flex: 1, color: "red" }}
                   >
                     Call
                   </Button>
