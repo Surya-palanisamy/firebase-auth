@@ -25,7 +25,6 @@ import {
 import { Camera, Check } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useSettings } from "../hooks/useSettings";
-import { resizeImageToDataURL } from "../utils/resizeImage";
 
 // ---------------- Tab Panel ----------------
 interface TabPanelProps {
@@ -86,19 +85,12 @@ function SettingsPageModernInner() {
   });
 
   // ---------------- Avatar ----------------
-  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined);
-  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
-
   const [savingProfile, setSavingProfile] = useState(false);
-  const [savingAvatar, setSavingAvatar] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
-
   const [savedProfile, setSavedProfile] = useState(false);
-  const [savedAvatar, setSavedAvatar] = useState(false);
   const [savedPrefs, setSavedPrefs] = useState(false);
   const [savedSecurity, setSavedSecurity] = useState(false);
-
   const [profileError, setProfileError] = useState<string | null>(null);
 
   // Load settings from Firestore
@@ -111,55 +103,8 @@ function SettingsPageModernInner() {
       phone: settings.phone || "",
     });
 
-    // 🔥 FIXED: use photoBase64 (not photoURL)
-    setAvatarSrc(settings.photoBase64 || undefined);
+    // ---------------- Avatar Upload ----------------
   }, [settings]);
-
-  // ---------------- Avatar Upload ----------------
-  const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 1 * 1024 * 1024) {
-      return setProfileError("Selected file too large. Max 1MB.");
-    }
-
-    try {
-      const dataUrl = await resizeImageToDataURL(file);
-
-      if (dataUrl.length > 950000) {
-        return setProfileError("Image too large after resize. Choose smaller.");
-      }
-
-      setAvatarBase64(dataUrl);
-      setAvatarSrc(dataUrl);
-      setProfileError(null);
-    } catch (err) {
-      console.error(err);
-      setProfileError("Failed to process image.");
-    }
-  };
-
-  const handleSaveAvatar = async () => {
-    if (!avatarBase64) return setProfileError("No avatar selected.");
-
-    setSavingAvatar(true);
-    const ok = await saveProfile({
-      fullName: accountForm.fullName,
-      email: accountForm.email,
-      phone: accountForm.phone,
-      avatarBase64,
-    });
-
-    if (ok) {
-      setSavedAvatar(true);
-      setTimeout(() => setSavedAvatar(false), 2000);
-    } else {
-      setProfileError("Failed to update avatar.");
-    }
-
-    setSavingAvatar(false);
-  };
 
   // ---------------- Save Profile ----------------
   const handleSaveProfile = async () => {
@@ -183,7 +128,6 @@ function SettingsPageModernInner() {
     } else {
       setProfileError("Failed to update profile.");
     }
-
     setSavingProfile(false);
   };
 
@@ -267,74 +211,6 @@ function SettingsPageModernInner() {
                 spacing={4}
                 alignItems="flex-start"
               >
-                {/* Avatar */}
-                <Stack
-                  alignItems="center"
-                  spacing={2}
-                  sx={{ width: { xs: "100%", md: 220 } }}
-                >
-                  <Avatar
-                    src={avatarSrc}
-                    sx={{
-                      width: 110,
-                      height: 110,
-                      fontSize: 32,
-                      fontWeight: 700,
-                      border: `3px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    {accountForm.fullName
-                      ?.split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()}
-                  </Avatar>
-
-                  <input
-                    id="avatar-input"
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={onAvatarSelected}
-                  />
-
-                  <label htmlFor="avatar-input" style={{ width: "100%" }}>
-                    <Button
-                      component="span"
-                      variant="contained"
-                      startIcon={<Camera size={16} />}
-                      fullWidth
-                      sx={{ textTransform: "none" }}
-                    >
-                      Choose Image
-                    </Button>
-                  </label>
-
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    disabled={!avatarBase64 || savingAvatar || loading}
-                    onClick={handleSaveAvatar}
-                    sx={{ textTransform: "none" }}
-                  >
-                    {savingAvatar ? (
-                      <CircularProgress size={18} />
-                    ) : (
-                      "Save Avatar"
-                    )}
-                  </Button>
-
-                  {savedAvatar && (
-                    <Alert
-                      severity="success"
-                      icon={<Check size={18} />}
-                      sx={{ mt: 1 }}
-                    >
-                      Avatar Updated
-                    </Alert>
-                  )}
-                </Stack>
-
                 {/* Profile */}
                 <Paper sx={{ p: 3, flexGrow: 1, borderRadius: 2 }}>
                   {profileError && (

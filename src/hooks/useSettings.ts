@@ -25,7 +25,6 @@ export interface SettingsData {
   phone: string;
   theme: "light" | "dark" | "system";
   twoFactorEnabled: boolean;
-  photoBase64?: string | null;
 }
 
 export const useSettings = () => {
@@ -38,7 +37,6 @@ export const useSettings = () => {
     phone: "",
     theme: "system",
     twoFactorEnabled: false,
-    photoBase64: null,
   });
 
   const [loading, setLoading] = useState(true);
@@ -57,7 +55,6 @@ export const useSettings = () => {
             phone: "",
             theme: "system",
             twoFactorEnabled: false,
-            photoBase64: null,
           });
           setLoading(false);
           return;
@@ -74,9 +71,6 @@ export const useSettings = () => {
             phone: stored.phone ?? "",
             theme: stored.theme ?? "system",
             twoFactorEnabled: stored.twoFactorEnabled ?? false,
-            photoBase64:
-              // stored.photoBase64 may not exist; default to null so UI handles it cleanly
-              stored.photoBase64 !== undefined ? stored.photoBase64 : null,
           });
         } catch (err) {
           console.error("Failed to load user settings:", err);
@@ -95,16 +89,7 @@ export const useSettings = () => {
      - Only write photoBase64 when explicitly provided (string or null).
   -------------------------------------------------- */
   const saveProfile = useCallback(
-    async (data: {
-      fullName: string;
-      email: string;
-      phone: string;
-      // avatarBase64:
-      //   - string  => write/replace avatar
-      //   - null    => explicitly clear avatar
-      //   - undefined => do not touch avatar field in Firestore (preserve existing)
-      avatarBase64?: string | null;
-    }) => {
+    async (data: { fullName: string; email: string; phone: string }) => {
       try {
         const user = auth.currentUser;
         if (!user) return false;
@@ -112,21 +97,6 @@ export const useSettings = () => {
         setLoading(true);
 
         // Update Firebase Auth displayName and optionally photoURL
-        // Only update photoURL when caller supplied avatarBase64 (string or null).
-        if (data.avatarBase64 !== undefined) {
-          // NOTE: large base64 strings may be rejected by updateProfile or by Auth rules.
-          // Best practice: store images in Storage and save URL in Firestore/Auth. We assume
-          // resize/compression was done upstream.
-          await updateProfile(user, {
-            displayName: data.fullName,
-            // set to string or null explicitly
-            photoURL: data.avatarBase64 === null ? null : data.avatarBase64,
-          });
-        } else {
-          // update only displayName
-          await updateProfile(user, { displayName: data.fullName });
-        }
-
         // update email in Firebase Auth if changed
         if (data.email !== user.email) {
           await updateEmail(user, data.email);
@@ -140,13 +110,6 @@ export const useSettings = () => {
           phone: data.phone,
           updatedAt: serverTimestamp(),
         };
-
-        // only include photoBase64 if caller explicitly provided it
-        if (data.avatarBase64 !== undefined) {
-          // avatarBase64 may be string OR null (explicit clear)
-          payload.photoBase64 = data.avatarBase64;
-        }
-
         // Perform the set/merge
         await setDoc(ref, payload, { merge: true });
 
@@ -169,12 +132,6 @@ export const useSettings = () => {
           fullName: refreshed?.displayName ?? data.fullName,
           email: refreshed?.email ?? data.email,
           phone: data.phone,
-          // If caller provided avatarBase64 (string or null) use that,
-          // otherwise preserve prev.photoBase64 (we didn't overwrite it).
-          photoBase64:
-            data.avatarBase64 !== undefined
-              ? data.avatarBase64
-              : prev.photoBase64 ?? null,
         }));
 
         setLoading(false);

@@ -18,8 +18,6 @@ export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null; // firebase auth name (or firestore fullName)
-  photoURL: string | null; // firebase auth photoURL (usually small or null)
-  photoBase64?: string | null; // Firestore base64 avatar (preferred)
   phone?: string | null; // Firestore phone
   role?: string | null; // Firestore role
 }
@@ -51,8 +49,6 @@ export const useAuth = () => {
           uid: fbUser.uid,
           email: fbUser.email ?? null,
           displayName: profile.fullName ?? fbUser.displayName ?? null,
-          photoURL: fbUser.photoURL ?? null,
-          photoBase64: profile.photoBase64 ?? null,
           phone: profile.phone ?? null,
           role: profile.role ?? (profile.role ? profile.role : "User"),
         });

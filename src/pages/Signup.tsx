@@ -28,17 +28,11 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 export default function Signup() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { isDarkMode } = useTheme();
@@ -48,24 +42,6 @@ export default function Signup() {
       navigate("/", { replace: true });
     }
   }, [user, authLoading, navigate]);
-
-  // Avatar preview
-  useEffect(() => {
-    if (!avatarFile) return setPreview(null);
-    const url = URL.createObjectURL(avatarFile);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [avatarFile]);
-
-  // Convert file → base64
-  const convertToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
   const validateForm = () => {
     if (!name || !email || !phone || !password || !confirmPassword) {
       setError("Please fill all fields");
@@ -102,16 +78,9 @@ export default function Signup() {
       );
       const firebaseUser: FirebaseUser = userCred.user;
 
-      let base64Avatar: string | null = null;
-
-      if (avatarFile) {
-        base64Avatar = await convertToBase64(avatarFile);
-      }
-
       // Update Firebase Auth profile (name + avatar only)
       await updateProfile(firebaseUser, {
         displayName: name,
-        photoURL: base64Avatar ?? undefined,
       });
 
       // Store full profile in Firestore
@@ -119,8 +88,7 @@ export default function Signup() {
         uid: firebaseUser.uid,
         fullName: name,
         email,
-        phone, // ✅ STORE PHONE
-        avatar: base64Avatar, // base64 image
+        phone,
         role: "User",
         createdAt: serverTimestamp(),
       });
@@ -168,34 +136,6 @@ export default function Signup() {
           </Alert>
         )}
 
-        {/* Avatar Picker */}
-        <Typography variant="body2" fontWeight="600" mb={1}>
-          Avatar (optional)
-        </Typography>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-          <Avatar src={preview ?? undefined} sx={{ width: 64, height: 64 }} />
-
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null;
-                setAvatarFile(file);
-              }}
-            />
-            <Button
-              variant="outlined"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {avatarFile ? "Change Avatar" : "Choose Avatar"}
-            </Button>
-          </div>
-        </Box>
-
         <Box
           component="form"
           onSubmit={handleSignup}
@@ -209,7 +149,6 @@ export default function Signup() {
             size="small"
           />
           <Typography fontWeight="600">Phone Number</Typography>{" "}
-          {/* ✅ NEW FIELD */}
           <TextField
             placeholder="1234567890"
             value={phone}
