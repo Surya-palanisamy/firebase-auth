@@ -1,23 +1,27 @@
+// src/hooks/useAuth.tsx
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import {
   createUserWithEmailAndPassword,
-  onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  onAuthStateChanged,
   type User as FirebaseUser,
+  updateProfile,
+  updateEmail,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { useCallback, useEffect, useState } from "react";
 import { getFirebaseAuth, getFirebaseDb } from "../firebase/client";
 
 export interface AuthUser {
   uid: string;
   email: string | null;
-  displayName: string | null;    // Firestore fullName
-  photoURL: string | null;       // Firestore avatar
-  phone: string | null;          // NEW
-  role: string | null;           // NEW
+  displayName: string | null; // firebase auth name (or firestore fullName)
+  photoURL: string | null; // firebase auth photoURL (usually small or null)
+  photoBase64?: string | null; // Firestore base64 avatar (preferred)
+  phone?: string | null; // Firestore phone
+  role?: string | null; // Firestore role
 }
 
 export const useAuth = () => {
@@ -29,53 +33,50 @@ export const useAuth = () => {
     const auth = getFirebaseAuth();
     const db = getFirebaseDb();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (!firebaseUser) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
+    const unsub = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
+      setLoading(true);
       try {
-        // Fetch Firestore user profile
-        const userRef = doc(db, "users", firebaseUser.uid);
-        const snap = await getDoc(userRef);
-
-        let profile = null;
-
-        if (snap.exists()) {
-          profile = snap.data();
+        if (!fbUser) {
+          setUser(null);
+          setLoading(false);
+          return;
         }
 
-        // Merge Firebase Auth + Firestore data
+        // try load Firestore profile
+        const userRef = doc(db, "users", fbUser.uid);
+        const snap = await getDoc(userRef);
+        const profile = snap.exists() ? (snap.data() as any) : {};
+
         setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: profile?.fullName ?? firebaseUser.displayName ?? null,
-          photoURL: profile?.avatar ?? firebaseUser.photoURL ?? null,
-          phone: profile?.phone ?? null,
-          role: profile?.role ?? "User",
+          uid: fbUser.uid,
+          email: fbUser.email ?? null,
+          displayName: profile.fullName ?? fbUser.displayName ?? null,
+          photoURL: fbUser.photoURL ?? null,
+          photoBase64: profile.photoBase64 ?? null,
+          phone: profile.phone ?? null,
+          role: profile.role ?? (profile.role ? profile.role : "User"),
         });
       } catch (err) {
-        console.error("Failed to fetch user profile:", err);
+        console.error("useAuth onAuthStateChanged error:", err);
+        setError("Failed to load user profile");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
     const auth = getFirebaseAuth();
-    await signInWithEmailAndPassword(auth, email, password);
+    return signInWithEmailAndPassword(auth, email, password);
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     setError(null);
     const auth = getFirebaseAuth();
-    await createUserWithEmailAndPassword(auth, email, password);
+    return createUserWithEmailAndPassword(auth, email, password);
   }, []);
 
   const logOut = useCallback(async () => {

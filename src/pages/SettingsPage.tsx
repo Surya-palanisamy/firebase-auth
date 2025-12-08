@@ -1,3 +1,7 @@
+// src/pages/SettingsPage.tsx
+"use client";
+
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -20,38 +24,26 @@ import {
   useTheme,
 } from "@mui/material";
 import { Camera, Check } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { resizeImageToDataURL } from "../utils/resizeImage";
 import { useSettings } from "../hooks/useSettings";
 
-/* --- Helpers --- */
+// ---------------- Tab Panel ----------------
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
   value: number;
 }
-function TabPanel({ children, value, index, ...other }: TabPanelProps) {
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`settings-tabpanel-${index}`}
-      aria-labelledby={`settings-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
-    </div>
-  );
+function TabPanel({ children, value, index }: TabPanelProps) {
+  return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
 }
+
 const a11yProps = (index: number) => ({
   id: `settings-tab-${index}`,
   "aria-controls": `settings-tabpanel-${index}`,
 });
 
-/* --- Minimal Error Boundary --- */
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
+// ---------------- Error Boundary ----------------
+class ErrorBoundary extends React.Component<any, { hasError: boolean }> {
   constructor(props: any) {
     super(props);
     this.state = { hasError: false };
@@ -59,19 +51,11 @@ class ErrorBoundary extends React.Component<
   static getDerivedStateFromError() {
     return { hasError: true };
   }
-  componentDidCatch(error: any, info: any) {
-    console.error("ErrorBoundary caught:", error, info);
-  }
   render() {
     if (this.state.hasError) {
       return (
         <Box sx={{ p: 6, textAlign: "center" }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Something went wrong.
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            Try reloading the page. If the problem persists, contact support.
-          </Typography>
+          <Typography variant="h6">Something went wrong.</Typography>
         </Box>
       );
     }
@@ -79,663 +63,413 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/* --- Main component --- */
-function SettingsPageModernInner() {
-  const theme = useTheme();
-  const {
-    settings = {
-      fullName: "",
-      email: "",
-      phone: "",
-      theme: "system",
-      twoFactorEnabled: false,
-    },
-    loading,
-    saveAccountSettings,
-    savePreferences,
-    saveSecuritySettings,
-  } = useSettings();
-
-  const [tabValue, setTabValue] = useState(0);
-
-  const [accountForm, setAccountForm] = useState({
-    fullName: settings.fullName || "",
-    email: settings.email || "",
-    phone: settings.phone || "",
-  });
-  useEffect(() => {
-    setAccountForm({
-      fullName: settings.fullName || "",
-      email: settings.email || "",
-      phone: settings.phone || "",
-    });
-  }, [settings]);
-
-  const [accountSaved, setAccountSaved] = useState(false);
-  const [accountError, setAccountError] = useState<string | null>(null);
-
-  const [preferenceForm, setPreferenceForm] = useState({
-    theme: (settings as any).theme || "system",
-  });
-  useEffect(() => {
-    setPreferenceForm({ theme: (settings as any).theme || "system" });
-  }, [settings]);
-
-  const [prefSaved, setPrefSaved] = useState(false);
-
-  const [securityForm, setSecurityForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-    twoFactorEnabled: (settings as any).twoFactorEnabled || false,
-  });
-  useEffect(() => {
-    setSecurityForm((s) => ({
-      ...s,
-      twoFactorEnabled: (settings as any).twoFactorEnabled || false,
-    }));
-  }, [settings]);
-
-  const [securitySaved, setSecuritySaved] = useState(false);
-  const [securityError, setSecurityError] = useState<string | null>(null);
-
-  // avatar preview state
-  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined);
-
-  const handleTabChange = (_e: any, v: number) => {
-    setTabValue(v);
-    setAccountSaved(false);
-    setPrefSaved(false);
-    setSecuritySaved(false);
-  };
-
-  const handleAccountSave = async () => {
-    setAccountError(null);
-    setAccountSaved(false);
-    if (!accountForm.fullName.trim())
-      return setAccountError("Full name required");
-    if (!accountForm.email.trim()) return setAccountError("Email required");
-    // You may want to include avatar data here if backend accepts it.
-    const success = await saveAccountSettings?.(accountForm);
-    if (success) {
-      setAccountSaved(true);
-      setTimeout(() => setAccountSaved(false), 3000);
-    } else {
-      setAccountError("Could not save account settings");
-    }
-  };
-
-  const handlePreferencesSave = async () => {
-    const success = await savePreferences?.(preferenceForm);
-    if (success) {
-      setPrefSaved(true);
-      setTimeout(() => setPrefSaved(false), 2500);
-    }
-  };
-
-  const handleSecuritySave = async () => {
-    setSecurityError(null);
-    if (
-      securityForm.newPassword &&
-      securityForm.newPassword !== securityForm.confirmPassword
-    ) {
-      return setSecurityError("New password and confirm do not match");
-    }
-    const success = await saveSecuritySettings?.(securityForm);
-    if (success) {
-      setSecuritySaved(true);
-      setSecurityForm((s) => ({
-        ...s,
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      }));
-      setTimeout(() => setSecuritySaved(false), 3000);
-    } else setSecurityError("Failed to update security settings");
-  };
-
-  // handle avatar file selection and preview
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAvatarSrc(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", py: 6 }}>
-      <Container maxWidth="md">
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Settings
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Keep your profile and account secure.
-          </Typography>
-        </Box>
-
-        <Paper
-          elevation={2}
-          sx={{
-            borderRadius: 3,
-            overflow: "hidden",
-            p: 0,
-            boxShadow: theme.shadows[8],
-          }}
-        >
-          {/* Header with Tabs: indicator blue; text keeps same color; no border/hover/outline */}
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              px: 3,
-              py: 1.5,
-              bgcolor: "background.paper",
-            }}
-          >
-            <Tabs
-              value={tabValue}
-              onChange={handleTabChange}
-              aria-label="settings tabs"
-              TabIndicatorProps={{
-                sx: {
-                  height: 3,
-                  borderRadius: 3,
-                  bgcolor: "primary.main", // blue underline
-                },
-              }}
-              sx={{
-                "& .MuiTabs-flexContainer": { gap: 4 },
-                minHeight: 48,
-                // remove any default outline/shadow on the container
-                "&.MuiTabs-root": { boxShadow: "none", border: "none" },
-              }}
-            >
-              <Tab
-                label="Account"
-                {...a11yProps(0)}
-                disableRipple
-                sx={{
-                  textTransform: "none",
-
-                  fontSize: 18,
-                  minHeight: 48,
-                  padding: "6px 8px",
-                  color: (t) => t.palette.text.secondary,
-                  "&.Mui-selected": { color: (t) => t.palette.text.secondary },
-                  // remove hover/background/border/focus visuals completely
-                  "&:hover": {
-                    backgroundColor: "transparent",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&:focus": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&.Mui-focusVisible": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                }}
-              />
-              <Tab
-                label="Preferences"
-                {...a11yProps(1)}
-                disableRipple
-                sx={{
-                  fontSize: 16,
-
-                  minHeight: 48,
-                  padding: "6px 8px",
-                  color: (t) => t.palette.text.secondary,
-                  "&.Mui-selected": { color: (t) => t.palette.text.secondary },
-                  "&:hover": {
-                    backgroundColor: "transparent",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&:focus": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&.Mui-focusVisible": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                }}
-              />
-              <Tab
-                label="Security"
-                {...a11yProps(2)}
-                disableRipple
-                sx={{
-                  textTransform: "none",
-                  fontSize: 16,
-                  minHeight: 48,
-                  padding: "6px 8px",
-                  color: (t) => t.palette.text.secondary,
-                  "&.Mui-selected": { color: (t) => t.palette.text.secondary },
-                  "&:hover": {
-                    backgroundColor: "transparent",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&:focus": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                  "&.Mui-focusVisible": {
-                    outline: "none",
-                    boxShadow: "none",
-                    border: "none",
-                  },
-                }}
-              />
-            </Tabs>
-            <Box />
-          </Box>
-
-          <Divider />
-
-          <Box sx={{ p: 4 }}>
-            {/* Account tab — timezone removed */}
-            <TabPanel value={tabValue} index={0}>
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 4,
-                  gridTemplateColumns: { xs: "1fr", md: "320px 1fr" },
-                  alignItems: "start",
-                }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 2,
-                    alignItems: "center",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Avatar
-                      src={avatarSrc}
-                      sx={{
-                        width: 96,
-                        height: 96,
-                        fontSize: 32,
-                        fontWeight: 800,
-                        bgcolor: avatarSrc ? "transparent" : undefined,
-                      }}
-                    >
-                      {!avatarSrc &&
-                        accountForm.fullName
-                          .split(" ")
-                          .map((n) => (n ? n[0] : ""))
-                          .join("")
-                          .toUpperCase()}
-                    </Avatar>
-                  </Box>
-
-                  <Stack direction="row" spacing={1}>
-                    <label htmlFor="avatar-upload">
-                      <input
-                        id="avatar-upload"
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={handleAvatarChange}
-                      />
-                      <Button
-                        component="span"
-                        variant="contained"
-                        startIcon={<Camera size={14} />}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Upload
-                      </Button>
-                    </label>
-                  </Stack>
-
-                  <Typography
-                    variant="caption"
-                    sx={{ color: "text.secondary" }}
-                  >
-                    JPG, PNG, GIF — max 5MB
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
-                    {accountError && (
-                      <Alert severity="error" sx={{ mb: 2 }}>
-                        {accountError}
-                      </Alert>
-                    )}
-                    {accountSaved && (
-                      <Alert
-                        icon={<Check size={18} />}
-                        severity="success"
-                        sx={{ mb: 2 }}
-                      >
-                        Saved
-                      </Alert>
-                    )}
-
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gap: 2,
-                        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                        alignItems: "center",
-                      }}
-                    >
-                      <Box sx={{ gridColumn: "1 / -1" }}>
-                        <TextField
-                          fullWidth
-                          label="Full name"
-                          variant="outlined"
-                          size="small"
-                          value={accountForm.fullName}
-                          onChange={(e) =>
-                            setAccountForm({
-                              ...accountForm,
-                              fullName: e.target.value,
-                            })
-                          }
-                        />
-                      </Box>
-
-                      <TextField
-                        fullWidth
-                        label="Email"
-                        type="email"
-                        variant="outlined"
-                        size="small"
-                        value={accountForm.email}
-                        onChange={(e) =>
-                          setAccountForm({
-                            ...accountForm,
-                            email: e.target.value,
-                          })
-                        }
-                      />
-
-                      <TextField
-                        fullWidth
-                        label="Phone"
-                        variant="outlined"
-                        size="small"
-                        value={accountForm.phone}
-                        onChange={(e) =>
-                          setAccountForm({
-                            ...accountForm,
-                            phone: e.target.value,
-                          })
-                        }
-                      />
-
-                      <Box
-                        sx={{
-                          display: "flex",
-                          gap: 2,
-                          alignItems: "center",
-                          gridColumn: "1 / -1",
-                          mt: 1,
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            width: { xs: "100%", sm: "auto" },
-                          }}
-                        >
-                          <Button
-                            variant="contained"
-                            onClick={handleAccountSave}
-                            disabled={loading}
-                            sx={{ px: 3, textTransform: "none" }}
-                          >
-                            {loading ? (
-                              <CircularProgress size={18} sx={{ mr: 1 }} />
-                            ) : null}
-                            Save
-                          </Button>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Paper>
-                </Box>
-              </Box>
-            </TabPanel>
-
-            {/* Preferences */}
-            <TabPanel value={tabValue} index={1}>
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 3,
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                }}
-              >
-                <Box>
-                  {prefSaved && (
-                    <Alert
-                      icon={<Check size={18} />}
-                      severity="success"
-                      sx={{ mb: 1 }}
-                    >
-                      Preferences saved
-                    </Alert>
-                  )}
-
-                  <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mt: 1 }}>
-                    <FormControl fullWidth size="small">
-                      <Select
-                        value={preferenceForm.theme}
-                        onChange={(e) =>
-                          setPreferenceForm({
-                            ...preferenceForm,
-                            theme: e.target.value,
-                          })
-                        }
-                        displayEmpty
-                      >
-                        <MenuItem value="light">Light</MenuItem>
-                        <MenuItem value="dark">Dark</MenuItem>
-                        <MenuItem value="system">System</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        mt: 3,
-                      }}
-                    >
-                      <Button
-                        variant="contained"
-                        onClick={handlePreferencesSave}
-                        disabled={loading}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Save
-                      </Button>
-                    </Box>
-                  </Paper>
-                </Box>
-              </Box>
-            </TabPanel>
-
-            {/* Security */}
-            <TabPanel value={tabValue} index={2}>
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 3,
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 360px" },
-                }}
-              >
-                <Box>
-                  <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
-                    {securityError && (
-                      <Alert severity="error">{securityError}</Alert>
-                    )}
-                    {securitySaved && (
-                      <Alert
-                        icon={<Check size={18} />}
-                        severity="success"
-                        sx={{ mb: 1 }}
-                      >
-                        Security updated
-                      </Alert>
-                    )}
-
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gap: 2,
-                        gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                        mt: 0.5,
-                      }}
-                    >
-                      <Box sx={{ gridColumn: "1 / -1" }}>
-                        <TextField
-                          fullWidth
-                          label="Current password"
-                          type="password"
-                          size="small"
-                          value={securityForm.currentPassword}
-                          onChange={(e) =>
-                            setSecurityForm({
-                              ...securityForm,
-                              currentPassword: e.target.value,
-                            })
-                          }
-                        />
-                      </Box>
-
-                      <TextField
-                        fullWidth
-                        label="New password"
-                        type="password"
-                        size="small"
-                        value={securityForm.newPassword}
-                        onChange={(e) =>
-                          setSecurityForm({
-                            ...securityForm,
-                            newPassword: e.target.value,
-                          })
-                        }
-                      />
-
-                      <TextField
-                        fullWidth
-                        label="Confirm password"
-                        type="password"
-                        size="small"
-                        value={securityForm.confirmPassword}
-                        onChange={(e) =>
-                          setSecurityForm({
-                            ...securityForm,
-                            confirmPassword: e.target.value,
-                          })
-                        }
-                      />
-
-                      <Box
-                        sx={{
-                          gridColumn: "1 / -1",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <Box>
-                          <Typography
-                            variant="subtitle2"
-                            sx={{ fontWeight: 700 }}
-                          >
-                            Two-Factor Authentication
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{ color: "text.secondary" }}
-                          >
-                            Add an extra layer of security to your account
-                          </Typography>
-                        </Box>
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={securityForm.twoFactorEnabled}
-                              onChange={(e) =>
-                                setSecurityForm({
-                                  ...securityForm,
-                                  twoFactorEnabled: e.target.checked,
-                                })
-                              }
-                            />
-                          }
-                          label=""
-                        />
-                      </Box>
-
-                      <Box
-                        sx={{
-                          gridColumn: "1 / -1",
-                          display: "flex",
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        <Button
-                          variant="contained"
-                          onClick={handleSecuritySave}
-                          disabled={loading}
-                          sx={{ textTransform: "none" }}
-                        >
-                          {loading ? (
-                            <CircularProgress size={18} sx={{ mr: 1 }} />
-                          ) : null}
-                          Save
-                        </Button>
-                      </Box>
-                    </Box>
-                  </Paper>
-                </Box>
-                <Box />
-              </Box>
-            </TabPanel>
-          </Box>
-        </Paper>
-      </Container>
-    </Box>
-  );
-}
-
-/* --- Export --- */
 export default function SettingsPageModern() {
   return (
     <ErrorBoundary>
       <SettingsPageModernInner />
     </ErrorBoundary>
+  );
+}
+
+function SettingsPageModernInner() {
+  const theme = useTheme();
+  const { settings, loading, saveProfile, savePreferences, saveSecurity } =
+    useSettings();
+
+  const [tabValue, setTabValue] = useState(0);
+
+  // ---------------- Account Form ----------------
+  const [accountForm, setAccountForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+  });
+
+  // ---------------- Avatar ----------------
+  const [avatarSrc, setAvatarSrc] = useState<string | undefined>(undefined); 
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null); 
+
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [savingSecurity, setSavingSecurity] = useState(false);
+
+  const [savedProfile, setSavedProfile] = useState(false);
+  const [savedAvatar, setSavedAvatar] = useState(false);
+  const [savedPrefs, setSavedPrefs] = useState(false);
+  const [savedSecurity, setSavedSecurity] = useState(false);
+
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  // Load settings from Firestore
+  useEffect(() => {
+    if (!settings) return;
+
+    setAccountForm({
+      fullName: settings.fullName || "",
+      email: settings.email || "",
+      phone: settings.phone || "",
+    });
+
+    // 🔥 FIXED: use photoBase64 (not photoURL)
+    setAvatarSrc(settings.photoBase64 || undefined);
+
+  }, [settings]);
+
+  // ---------------- Avatar Upload ----------------
+  const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      return setProfileError("Selected file too large. Max 1MB.");
+    }
+
+    try {
+      const dataUrl = await resizeImageToDataURL(file);
+
+      if (dataUrl.length > 950000) {
+        return setProfileError("Image too large after resize. Choose smaller.");
+      }
+
+      setAvatarBase64(dataUrl);
+      setAvatarSrc(dataUrl);
+      setProfileError(null);
+    } catch (err) {
+      console.error(err);
+      setProfileError("Failed to process image.");
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!avatarBase64) return setProfileError("No avatar selected.");
+
+    setSavingAvatar(true);
+    const ok = await saveProfile({
+      fullName: accountForm.fullName,
+      email: accountForm.email,
+      phone: accountForm.phone,
+      avatarBase64,
+    });
+
+    if (ok) {
+      setSavedAvatar(true);
+      setTimeout(() => setSavedAvatar(false), 2000);
+    } else {
+      setProfileError("Failed to update avatar.");
+    }
+
+    setSavingAvatar(false);
+  };
+
+  // ---------------- Save Profile ----------------
+  const handleSaveProfile = async () => {
+    setProfileError(null);
+
+    if (!accountForm.fullName.trim()) return setProfileError("Full name required");
+    if (!accountForm.email.trim()) return setProfileError("Email required");
+
+    setSavingProfile(true);
+
+    const ok = await saveProfile({
+      fullName: accountForm.fullName,
+      email: accountForm.email,
+      phone: accountForm.phone,
+    });
+
+    if (ok) {
+      setSavedProfile(true);
+      setTimeout(() => setSavedProfile(false), 2000);
+    } else {
+      setProfileError("Failed to update profile.");
+    }
+
+    setSavingProfile(false);
+  };
+
+  // ---------------- Save Preferences ----------------
+  const [preferenceForm, setPreferenceForm] = useState({
+    theme: "system",
+  });
+
+  useEffect(() => {
+    setPreferenceForm({ theme: settings.theme });
+  }, [settings]);
+
+  const handleSavePreferences = async () => {
+    setSavingPrefs(true);
+    const ok = await savePreferences({ theme: preferenceForm.theme });
+
+    if (ok) {
+      setSavedPrefs(true);
+      setTimeout(() => setSavedPrefs(false), 2000);
+    }
+
+    setSavingPrefs(false);
+  };
+
+  // ---------------- Save Security ----------------
+  const [securityForm, setSecurityForm] = useState({
+    twoFactorEnabled: false,
+  });
+
+  useEffect(() => {
+    setSecurityForm({
+      twoFactorEnabled: settings.twoFactorEnabled,
+    });
+  }, [settings]);
+
+  const handleSaveSecurity = async () => {
+    setSavingSecurity(true);
+
+    const ok = await saveSecurity(securityForm);
+
+    if (ok) {
+      setSavedSecurity(true);
+      setTimeout(() => setSavedSecurity(false), 2000);
+    }
+
+    setSavingSecurity(false);
+  };
+
+  // ---------------- UI ----------------
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", py: 6 }}>
+      <Container maxWidth="md">
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
+          Settings
+        </Typography>
+        <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
+          Manage your profile, preferences & security.
+        </Typography>
+
+        <Paper elevation={3} sx={{ borderRadius: 3, overflow: "hidden" }}>
+          <Box sx={{ px: 3, pt: 2 }}>
+            <Tabs
+              value={tabValue}
+              onChange={(_, v) => setTabValue(v)}
+              TabIndicatorProps={{ sx: { height: 3, borderRadius: 3 } }}
+              sx={{ "& .MuiTabs-flexContainer": { gap: 3 } }}
+            >
+              <Tab label="Account" {...a11yProps(0)} />
+              <Tab label="Preferences" {...a11yProps(1)} />
+              <Tab label="Security" {...a11yProps(2)} />
+            </Tabs>
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ p: 3 }}>
+            {/* ACCOUNT */}
+            <TabPanel value={tabValue} index={0}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={4}
+                alignItems="flex-start"
+              >
+                {/* Avatar */}
+                <Stack alignItems="center" spacing={2} sx={{ width: { xs: "100%", md: 220 } }}>
+                  <Avatar
+                    src={avatarSrc}
+                    sx={{
+                      width: 110,
+                      height: 110,
+                      fontSize: 32,
+                      fontWeight: 700,
+                      border: `3px solid ${theme.palette.divider}`,
+                    }}
+                  >
+                    {accountForm.fullName
+                      ?.split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()}
+                  </Avatar>
+
+                  <input
+                    id="avatar-input"
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={onAvatarSelected}
+                  />
+
+                  <label htmlFor="avatar-input" style={{ width: "100%" }}>
+                    <Button
+                      component="span"
+                      variant="contained"
+                      startIcon={<Camera size={16} />}
+                      fullWidth
+                      sx={{ textTransform: "none" }}
+                    >
+                      Choose Image
+                    </Button>
+                  </label>
+
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    disabled={!avatarBase64 || savingAvatar || loading}
+                    onClick={handleSaveAvatar}
+                    sx={{ textTransform: "none" }}
+                  >
+                    {savingAvatar ? <CircularProgress size={18} /> : "Save Avatar"}
+                  </Button>
+
+                  {savedAvatar && (
+                    <Alert severity="success" icon={<Check size={18} />} sx={{ mt: 1 }}>
+                      Avatar Updated
+                    </Alert>
+                  )}
+                </Stack>
+
+                {/* Profile */}
+                <Paper sx={{ p: 3, flexGrow: 1, borderRadius: 2 }}>
+                  {profileError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {profileError}
+                    </Alert>
+                  )}
+
+                  {savedProfile && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Profile Updated
+                    </Alert>
+                  )}
+
+                  <Stack spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Full name"
+                      size="small"
+                      value={accountForm.fullName}
+                      onChange={(e) =>
+                        setAccountForm({ ...accountForm, fullName: e.target.value })
+                      }
+                    />
+
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      size="small"
+                      value={accountForm.email}
+                      onChange={(e) =>
+                        setAccountForm({ ...accountForm, email: e.target.value })
+                      }
+                    />
+
+                    <TextField
+                      fullWidth
+                      label="Phone"
+                      size="small"
+                      value={accountForm.phone}
+                      onChange={(e) =>
+                        setAccountForm({ ...accountForm, phone: e.target.value })
+                      }
+                    />
+
+                    <Box textAlign="right">
+                      <Button
+                        variant="contained"
+                        onClick={handleSaveProfile}
+                        disabled={savingProfile || loading}
+                        sx={{ textTransform: "none", px: 3 }}
+                      >
+                        {savingProfile ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+                        Save Profile
+                      </Button>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </Stack>
+            </TabPanel>
+
+            {/* PREFERENCES */}
+            <TabPanel value={tabValue} index={1}>
+              <Paper sx={{ p: 3, borderRadius: 2 }}>
+                <Stack spacing={2}>
+                  <FormControl fullWidth size="small">
+                    <Select
+                      value={preferenceForm.theme}
+                      onChange={(e) =>
+                        setPreferenceForm({ theme: e.target.value as any })
+                      }
+                    >
+                      <MenuItem value="light">Light</MenuItem>
+                      <MenuItem value="dark">Dark</MenuItem>
+                      <MenuItem value="system">System</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <Box textAlign="right">
+                    <Button
+                      variant="contained"
+                      onClick={handleSavePreferences}
+                      disabled={savingPrefs || loading}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {savingPrefs ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+                      Save Preferences
+                    </Button>
+                  </Box>
+
+                  {savedPrefs && <Alert severity="success">Preferences Saved</Alert>}
+                </Stack>
+              </Paper>
+            </TabPanel>
+
+            {/* SECURITY */}
+            <TabPanel value={tabValue} index={2}>
+              <Paper sx={{ p: 3, borderRadius: 2 }}>
+                <Stack spacing={3}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        Two-Factor Authentication
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Add an extra layer of protection to your account
+                      </Typography>
+                    </Box>
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={securityForm.twoFactorEnabled}
+                          onChange={(e) =>
+                            setSecurityForm({
+                              twoFactorEnabled: e.target.checked,
+                            })
+                          }
+                        />
+                      }
+                      label=""
+                    />
+                  </Stack>
+
+                  <Box textAlign="right">
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveSecurity}
+                      disabled={savingSecurity || loading}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {savingSecurity ? (
+                        <CircularProgress size={18} sx={{ mr: 1 }} />
+                      ) : null}
+                      Save Security
+                    </Button>
+                  </Box>
+
+                  {savedSecurity && (
+                    <Alert severity="success">Security Settings Saved</Alert>
+                  )}
+                </Stack>
+              </Paper>
+            </TabPanel>
+          </Box>
+        </Paper>
+      </Container>
+    </Box>
   );
 }

@@ -1,3 +1,7 @@
+// -------------------------
+//  DASHBOARD (Optimized)
+// -------------------------
+
 import {
   alpha,
   Box,
@@ -18,13 +22,18 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { useEffect, useState, type FormEvent } from "react";
+import React, {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 
 import Tooltip, { tooltipClasses, TooltipProps } from "@mui/material/Tooltip";
 import { styled } from "@mui/material/styles";
 
 import { LineChart } from "@mui/x-charts/LineChart";
-import { XAxis } from "@mui/x-charts/models";
 
 import {
   AlertTriangle,
@@ -44,44 +53,47 @@ import {
   getWeatherIconUrl,
   type WeatherData,
 } from "../services/weatherService";
+
 import {
   dateAxisFormatter,
   percentageFormatter,
   usUnemploymentRate,
 } from "./UnemploymentRate";
 
-const xAxis: XAxis<"time">[] = [
-  {
-    dataKey: "date",
-    scaleType: "time",
-    valueFormatter: dateAxisFormatter,
-  },
-];
-const yAxis = [
-  {
-    valueFormatter: percentageFormatter,
-  },
-];
-const series = [
-  {
-    dataKey: "rate",
-    showMark: false,
-    valueFormatter: percentageFormatter,
-  },
-];
-const margin = { right: 24 };
-const uData = [4000, 3000, 2000, 2780, 1890, 2390, 3490];
-const pData = [2400, 1398, 9800, 3908, 4800, 3800, 4300];
-const xLabels = [
-  "Page A",
-  "Page B",
-  "Page C",
-  "Page D",
-  "Page E",
-  "Page F",
-  "Page G",
+// ----------------------------------------------------------------
+// Extract Static Values (Prevents re-creation on each render)
+// ----------------------------------------------------------------
+
+const LOCATION_OPTIONS = [
+  "All Locations",
+  "Downtown",
+  "Riverside",
+  "North District",
+  "South Bay",
 ];
 
+const SEVERITY_OPTIONS = [
+  "All Severity Levels",
+  "High",
+  "Moderate",
+  "Low",
+];
+
+// Tooltip styling memoized outside component
+const BootstrapTooltip = styled(({ className, ...props }: TooltipProps) => (
+  <Tooltip {...props} arrow classes={{ popper: className }} />
+))(({ theme }) => ({
+  [`& .${tooltipClasses.arrow}`]: {
+    color: theme.palette.common.black,
+  },
+  [`& .${tooltipClasses.tooltip}`]: {
+    backgroundColor: theme.palette.common.black,
+  },
+}));
+
+// ---------------------------
+// MAIN COMPONENT
+// ---------------------------
 export default function Dashboard() {
   const theme = useTheme();
   const { isLoading, refreshData, sendEmergencyBroadcast, user } =
@@ -91,560 +103,376 @@ export default function Dashboard() {
   const [selectedSeverity, setSelectedSeverity] = useState(
     "All Severity Levels"
   );
+
   const [refreshing, setRefreshing] = useState(false);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
+
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
-  // Use palette tokens (strings) instead of resolved color strings so they adapt cleanly
-  const riskData = {
-    low: { count: 3, colorToken: "success" as const },
-    moderate: { count: 5, colorToken: "warning" as const },
-    high: { count: 2, colorToken: "error" as const },
-  };
+  // --------------------------
+  // Optimized Static Data using useMemo
+  // --------------------------
 
-  const stats = {
-    activeAlerts: { count: 12, change: "+2" },
-    evacuated: { count: 1234, change: "+89" },
-    rescueTeams: { count: 8, change: "-1" },
-    openShelters: { count: 15, change: "+3" },
-  };
-
-  const threshold = 3.5;
-  const waterLevelData = Array.from({ length: 8 }, (_, i) => {
-    const currentLevel = +(Math.random() * 2 + 1).toFixed(2);
-    const predictedLevel = +(currentLevel + (Math.random() * 1 + 0.5)).toFixed(
-      2
-    );
-    if (predictedLevel > threshold) {
-    }
-    return {
-      time: `${String(i * 3).padStart(2, "0")}:00`,
-      currentLevel,
-      predictedLevel,
-    };
-  });
-
-  const lastEntry = waterLevelData[waterLevelData.length - 1];
-  const predictedPeak = Math.max(
-    ...waterLevelData.map((e) => e.predictedLevel)
+  const riskData = useMemo(
+    () => ({
+      low: { count: 3, colorToken: "success" as const },
+      moderate: { count: 5, colorToken: "warning" as const },
+      high: { count: 2, colorToken: "error" as const },
+    }),
+    []
   );
-  const timeToPeak =
-    waterLevelData.find((entry) => entry.predictedLevel === predictedPeak)
-      ?.time ?? "Unknown";
 
+  const stats = useMemo(
+    () => ({
+      activeAlerts: { count: 12, change: "+2" },
+      evacuated: { count: 1234, change: "+89" },
+      rescueTeams: { count: 8, change: "-1" },
+      openShelters: { count: 15, change: "+3" },
+    }),
+    []
+  );
+
+  const statRows = useMemo(() => {
+    const entries = Object.entries(stats);
+    return [entries.slice(0, 2), entries.slice(2, 4)];
+  }, [stats]);
+
+  // --------------------------
+  // WEATHER FETCH — OPTIMIZED
+  // --------------------------
+
+  const loadWeatherData = useCallback(async () => {
+    setWeatherLoading(true);
+
+    try {
+      const coords = await getCurrentLocation();
+      const data = await fetchWeatherData(undefined, coords);
+      setWeather(data);
+    } catch {
+      const fallback = await fetchWeatherData();
+      setWeather(fallback);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
+
+  // Initial weather load
+  useEffect(() => {
+    loadWeatherData();
+  }, [loadWeatherData]);
+
+  // --------------------------
+  // REFRESH HANDLER — OPTIMIZED
+  // --------------------------
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshData(), loadWeatherData()]);
+    setTimeout(() => setRefreshing(false), 600);
+  }, [refreshData, loadWeatherData]);
+
+  // --------------------------
+  // FLOOD LEVEL FETCH — CLEANED UP
+  // --------------------------
   const [floodLevels, setFloodLevels] = useState({
     current: 0,
     predicted: 0,
     timeToPeak: "N/A",
   });
 
-  useEffect(() => {
-    const fetchWaterLevel = async () => {
-      try {
-        // placeholder, keep your actual API
-        const response = await axios.get(
-          "https://jsonplaceholder.typicode.com/todos/1"
-        );
-        // adapt to your real feed parsing — here we'll mock:
-        const level = Number((Math.random() * 2 + 0.5).toFixed(2));
-        setFloodLevels({
-          current: level,
-          predicted: +(level + Math.random() * 1).toFixed(2),
-          timeToPeak,
-        });
-      } catch (error) {
-        console.error("Error fetching ThingSpeak data:", error);
-      }
-    };
+  const getFloodLevels = useCallback(async () => {
+    try {
+      await axios.get("https://jsonplaceholder.typicode.com/todos/1");
 
-    fetchWaterLevel();
-    const interval = setInterval(fetchWaterLevel, 15000);
-    return () => clearInterval(interval);
-  }, [timeToPeak]);
+      const cur = +(Math.random() * 2 + 0.5).toFixed(2);
+      const pred = +(cur + Math.random()).toFixed(2);
 
-  useEffect(() => {
-    loadWeatherData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      setFloodLevels({
+        current: cur,
+        predicted: pred,
+        timeToPeak: pred > 3.5 ? "Rising" : "Stable",
+      });
+    } catch (err) {
+      console.error("Flood API error:", err);
+    }
   }, []);
 
-  const loadWeatherData = async () => {
-    setWeatherLoading(true);
-    try {
-      const coords = await getCurrentLocation();
-      const data = await fetchWeatherData(undefined, coords);
-      setWeather(data);
-    } catch (error) {
-      console.error("Failed to fetch weather data:", error);
-      const data = await fetchWeatherData();
-      setWeather(data);
-    } finally {
-      setWeatherLoading(false);
-    }
-  };
+  useEffect(() => {
+    getFloodLevels();
+    const interval = setInterval(getFloodLevels, 15000);
+    return () => clearInterval(interval);
+  }, [getFloodLevels]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await refreshData();
-    await loadWeatherData();
-    setTimeout(() => setRefreshing(false), 800);
-  };
-
+  // --------------------------
+  // EMERGENCY BROADCAST
+  // --------------------------
   const handleSendBroadcast = async (e: FormEvent) => {
     e.preventDefault();
     if (!broadcastMessage.trim()) return;
+
     setSendingBroadcast(true);
+
     try {
       await sendEmergencyBroadcast(broadcastMessage);
       setBroadcastMessage("");
       setShowBroadcastModal(false);
-    } catch (err) {
-      console.error(err);
     } finally {
       setSendingBroadcast(false);
     }
   };
 
+  // --------------------------
+  // RENDER LOADER
+  // --------------------------
   if (isLoading) {
     return (
       <LoadingSpinnerModern variant="bar-wave" size="md" color="primary" />
     );
   }
 
-  // Styled tooltip (keeps as you had)
-  const BootstrapTooltip = styled(({ className, ...props }: TooltipProps) => (
-    <Tooltip {...props} arrow classes={{ popper: className }} />
-  ))(({ theme }) => ({
-    [`& .${tooltipClasses.arrow}`]: {
-      color: theme.palette.common.black,
-    },
-    [`& .${tooltipClasses.tooltip}`]: {
-      backgroundColor: theme.palette.common.black,
-    },
-  }));
-
-  // chunk stats for 2x2 layout
-  const statEntries = Object.entries(stats);
-  const statRows: Array<Array<[string, { count: number; change: string }]>> =
-    [];
-  for (let i = 0; i < Math.min(4, statEntries.length); i += 2) {
-    statRows.push(statEntries.slice(i, i + 2));
-  }
-
+  // --------------------------
+  // JSX
+  // --------------------------
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          justifyContent: "space-between",
-          alignItems: { xs: "flex-start", md: "center" },
-          gap: 2,
-        }}
-      >
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Welcome, {user?.name || "User"}!
-        </Typography>
-
-        <Stack
-          direction="row"
-          spacing={2}
-          sx={{ width: { xs: "100%", md: "auto" }, m: 2 }}
-        >
-          <BootstrapTooltip title="Click to refresh">
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              startIcon={
-                refreshing ? (
-                  <CircularProgress size={18} />
-                ) : (
-                  <RefreshCw size={18} />
-                )
-              }
-              variant="outlined"
-              sx={{
-                textTransform: "capitalize",
-                width: { xs: "90%", sm: "auto" },
-                p: 2,
-              }}
-            >
-              Refresh Data
-            </Button>
-          </BootstrapTooltip>
-
-          <BootstrapTooltip title="Send a emergency broadcast to all users">
-            <Button
-              onClick={() => setShowBroadcastModal(true)}
-              startIcon={<AlertTriangle size={17} />}
-              variant="contained"
-              color="error"
-              sx={{
-                textTransform: "capitalize",
-                width: { xs: "100%", sm: "auto" },
-                p: 2,
-              }}
-            >
-              Emergency Broadcast
-            </Button>
-          </BootstrapTooltip>
-        </Stack>
-      </Box>
+      {/* Header */}
+      <Header
+        userName={user?.name || "User"}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        onBroadcastClick={() => setShowBroadcastModal(true)}
+      />
 
       {/* Filters */}
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
-        <FormControl sx={{ minWidth: 200, p: 1 }}>
-          <InputLabel>Location</InputLabel>
-          <Select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-            label="Location"
-          >
-            <MenuItem value="All Locations">All Locations</MenuItem>
-            <MenuItem value="Downtown">Downtown</MenuItem>
-            <MenuItem value="Riverside">Riverside</MenuItem>
-            <MenuItem value="North District">North District</MenuItem>
-            <MenuItem value="South Bay">South Bay</MenuItem>
-          </Select>
-        </FormControl>
+      <Filters
+        selectedLocation={selectedLocation}
+        setSelectedLocation={setSelectedLocation}
+        selectedSeverity={selectedSeverity}
+        setSelectedSeverity={setSelectedSeverity}
+      />
 
-        <FormControl sx={{ minWidth: 200, p: 1 }}>
-          <InputLabel>Severity</InputLabel>
-          <Select
-            value={selectedSeverity}
-            onChange={(e) => setSelectedSeverity(e.target.value)}
-            label="Severity"
-          >
-            <MenuItem value="All Severity Levels">All Severity Levels</MenuItem>
-            <MenuItem value="High">High</MenuItem>
-            <MenuItem value="Moderate">Moderate</MenuItem>
-            <MenuItem value="Low">Low</MenuItem>
-          </Select>
-        </FormControl>
-      </Stack>
+      {/* Risk Cards */}
+      <RiskCards riskData={riskData} />
 
-      {/* Risk Data Cards */}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
-        {Object.entries(riskData).map(([level, data]) => {
-          const colorToken = (data as any).colorToken as
-            | "success"
-            | "warning"
-            | "error";
-          return (
-            <Card key={level} sx={{ flex: 1 }}>
-              <CardContent>
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ textTransform: "capitalize" }}
-                    >
-                      {level} Risk
-                    </Typography>
-
-                    {/* explicit palette token for number */}
-                    <Typography
-                      variant="h4"
-                      sx={{
-                        fontWeight: 700,
-                        mt: 1,
-                        color: (t) => (t.palette as any)[colorToken].main,
-                      }}
-                    >
-                      {(data as any).count}
-                    </Typography>
-
-                    <Typography variant="body2" color="text.secondary">
-                      Zones
-                    </Typography>
-                  </Box>
-
-                  <Box
-                    sx={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: "50%",
-                      bgcolor: (t) =>
-                        alpha((t.palette as any)[colorToken].main, 0.12),
-                    }}
-                  />
-                </Box>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </Stack>
-
-      {/* Main Content Grid */}
-      <Stack direction={{ xs: "column", lg: "row" }} spacing={3} sx={{ mb: 3 }}>
-        {/* Weather Card */}
-        <Card sx={{ flex: { lg: 1 } }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Current Weather
-            </Typography>
-
-            {weatherLoading ? (
-              <LoadingSpinnerModern
-                variant="gradient-ring"
-                size="md"
-                color="#7c3aed"
-              />
-            ) : weather ? (
-              <Stack spacing={2}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Box>
-                    <Typography
-                      variant="h3"
-                      sx={{
-                        fontWeight: 700,
-                        color: (t) => t.palette.info.main,
-                      }}
-                    >
-                      {weather.temp}°C
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {weather.condition}
-                    </Typography>
-                  </Box>
-
-                  <img
-                    src={getWeatherIconUrl(weather.icon) || "/placeholder.svg"}
-                    alt={weather.condition}
-                    style={{ width: 64, height: 64 }}
-                  />
-                </Box>
-
-                <Stack spacing={1}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Droplets size={20} color={theme.palette.info.main} />
-                    <Typography variant="body2" color="info.main">
-                      Humidity: {weather.humidity}%
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Droplets size={20} color={theme.palette.info.main} />
-                    <Typography variant="body2" color="info.main">
-                      Rainfall: {weather.rainfall}mm
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <MapPin size={20} color={theme.palette.info.main} />
-                    <Typography variant="body2" color="info.main">
-                      Location: {weather.location}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </Stack>
-            ) : (
-              <Typography color="text.secondary">
-                Weather data unavailable
-              </Typography>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Stats area: exact 2 + 2 layout using explicit rows */}
-        <Box sx={{ flex: { lg: 1 }, width: "100%" }}>
-          <Stack direction="column" spacing={2} sx={{ width: "100%" }}>
-            {statRows.map((row, rowIndex) => (
-              <Stack
-                key={rowIndex}
-                direction="row"
-                spacing={2}
-                sx={{ width: "100%" }}
-                justifyContent="center"
-              >
-                {row.map(([key, data]) => (
-                  <StatCard key={key} title={key} data={data} theme={theme} />
-                ))}
-              </Stack>
-            ))}
-          </Stack>
-        </Box>
-      </Stack>
+      {/* Weather + Stats */}
+      <WeatherAndStats
+        weather={weather}
+        weatherLoading={weatherLoading}
+        statRows={statRows}
+        theme={theme}
+      />
 
       {/* Flood Predictions */}
-      <Stack direction={{ xs: "column", lg: "row" }} spacing={3}>
-        <Card sx={{ flex: { lg: 1 } }}>
-          <CardContent>
-            <Box
-              sx={{
-                height: 310,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <iframe
-                src="https://thingspeak.com/channels/2901817/charts/1?bgcolor=%23ffffff&color=%230072bd&dynamic=true&type=line&update=15&width=2000&height=310"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: 8,
-                }}
-                allowFullScreen
-                title="Real-Time Water Level"
-              />
-            </Box>
-          </CardContent>
-        </Card>
+      <FloodPrediction floodLevels={floodLevels} theme={theme} />
 
-        {/* Flood Level Predictions */}
-        <Card sx={{ flex: { lg: 1 } }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Flood Level Predictions
-            </Typography>
-            <Stack spacing={2}>
-              <Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 1 }}
-                >
-                  Current Level
-                </Typography>
-                <Box
-                  sx={{
-                    height: 12,
-                    bgcolor: theme.palette.success.main,
-                    borderRadius: 1,
-                    width: `${Math.min(100, (floodLevels.current / 8) * 100)}%`,
-                  }}
-                />
-                <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
-                  {floodLevels.current}m
-                </Typography>
-              </Box>
+      {/* Charts */}
+      <Charts />
 
-              <Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 1 }}
-                >
-                  Predicted Peak
-                </Typography>
-                <Box
-                  sx={{
-                    height: 12,
-                    bgcolor: theme.palette.error.main,
-                    borderRadius: 1,
-                    width: `${Math.min(
-                      100,
-                      (floodLevels.predicted / 8) * 100
-                    )}%`,
-                  }}
-                />
-                <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
-                  {floodLevels.predicted}m
-                </Typography>
-              </Box>
-
-              <Box
-                sx={{ pt: 1, borderTop: `1px solid ${theme.palette.divider}` }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  Time to Peak
-                </Typography>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    mt: 1,
-                    fontWeight: 700,
-                    color:
-                      floodLevels.timeToPeak === "Receding"
-                        ? theme.palette.error.main
-                        : floodLevels.timeToPeak === "Stable"
-                        ? theme.palette.success.main
-                        : theme.palette.info.main,
-                  }}
-                >
-                  {floodLevels.timeToPeak}
-                </Typography>
-              </Box>
-            </Stack>
-          </CardContent>
-        </Card>
-      </Stack>
-
-      <Stack sx={{ mt: 3 }}>
-        <LineChart
-          dataset={usUnemploymentRate}
-          xAxis={xAxis}
-          yAxis={yAxis}
-          series={series}
-          height={300}
-          grid={{ vertical: true, horizontal: true }}
-        />
-      </Stack>
-
-      <hr style={{ margin: "12px" }} />
-
-      <Stack>
-        <LineChart
-          series={[
-            { data: pData, label: "pv" },
-            { data: uData, label: "uv" },
-          ]}
-          xAxis={[{ scaleType: "point", data: xLabels }]}
-          yAxis={[{ width: 50 }]}
-          margin={margin}
-        />
-      </Stack>
-
-      {/* Emergency Broadcast Dialog */}
-      <Dialog
+      {/* Broadcast Dialog */}
+      <BroadcastDialog
         open={showBroadcastModal}
+        message={broadcastMessage}
+        loading={sendingBroadcast}
         onClose={() => setShowBroadcastModal(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Send Emergency Broadcast</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            fullWidth
-            label="Broadcast Message"
-            multiline
-            rows={4}
-            value={broadcastMessage}
-            onChange={(e) => setBroadcastMessage(e.target.value)}
-            placeholder="Enter emergency broadcast message..."
-          />
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setShowBroadcastModal(false)}>Cancel</Button>
-          <Button
-            onClick={handleSendBroadcast}
-            disabled={!broadcastMessage.trim() || sendingBroadcast}
-            variant="contained"
-            color="error"
-            startIcon={
-              sendingBroadcast ? <CircularProgress size={20} /> : undefined
-            }
-          >
-            {sendingBroadcast ? "Sending..." : "Send Broadcast"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onChange={(e) => setBroadcastMessage(e.target.value)}
+        onSubmit={handleSendBroadcast}
+      />
     </Box>
   );
 }
 
-/* Reusable small stat card used in the 2x2 layout */
-function StatCard({
+
+const Header = React.memo(function Header({
+  userName,
+  refreshing,
+  onRefresh,
+  onBroadcastClick,
+}: {
+  userName: string;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onBroadcastClick: () => void;
+}) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" },
+        justifyContent: "space-between",
+        alignItems: { xs: "flex-start", md: "center" },
+        mb: 3,
+      }}
+    >
+      <Typography variant="h4" sx={{ fontWeight: 600 }}>
+        Welcome, {userName}!
+      </Typography>
+
+      <Stack direction="row" spacing={2} sx={{ mt: { xs: 2, md: 0 } }}>
+        <Button
+          onClick={onRefresh}
+          disabled={refreshing}
+          startIcon={refreshing ? <CircularProgress size={18} /> : <RefreshCw />}
+          variant="outlined"
+          sx={{ textTransform: "capitalize", p: 2 }}
+        >
+          Refresh Data
+        </Button>
+
+        <Button
+          onClick={onBroadcastClick}
+          startIcon={<AlertTriangle />}
+          color="error"
+          variant="contained"
+          sx={{ textTransform: "capitalize", p: 2 }}
+        >
+          Emergency Broadcast
+        </Button>
+      </Stack>
+    </Box>
+  );
+});
+
+const Filters = React.memo(function Filters({
+  selectedLocation,
+  setSelectedLocation,
+  selectedSeverity,
+  setSelectedSeverity,
+}: any) {
+  return (
+    <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
+      <FormControl sx={{ minWidth: 200 }}>
+        <InputLabel>Location</InputLabel>
+        <Select
+          value={selectedLocation}
+          onChange={(e) => setSelectedLocation(e.target.value)}
+        >
+          {LOCATION_OPTIONS.map((loc) => (
+            <MenuItem key={loc} value={loc}>
+              {loc}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl sx={{ minWidth: 200 }}>
+        <InputLabel>Severity</InputLabel>
+        <Select
+          value={selectedSeverity}
+          onChange={(e) => setSelectedSeverity(e.target.value)}
+        >
+          {SEVERITY_OPTIONS.map((sev) => (
+            <MenuItem key={sev} value={sev}>
+              {sev}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Stack>
+  );
+});
+
+const RiskCards = React.memo(function RiskCards({
+  riskData,
+}: {
+  riskData: Record<string, { count: number; colorToken: string }>;
+}) {
+  return (
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
+      {Object.entries(riskData).map(([level, data]) => (
+        <Card key={level} sx={{ flex: 1 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ textTransform: "capitalize" }}>
+              {level} Risk
+            </Typography>
+
+            <Typography
+              variant="h4"
+              sx={{
+                mt: 1,
+                fontWeight: 700,
+                color: (t) => (t.palette as any)[data.colorToken].main,
+              }}
+            >
+              {data.count}
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary">
+              Zones
+            </Typography>
+          </CardContent>
+        </Card>
+      ))}
+    </Stack>
+  );
+});
+
+const WeatherAndStats = React.memo(function WeatherAndStats({
+  weather,
+  weatherLoading,
+  statRows,
+  theme,
+}: any) {
+  return (
+    <Stack direction={{ xs: "column", lg: "row" }} spacing={3} sx={{ mb: 3 }}>
+      {/* Weather */}
+      <Card sx={{ flex: 1 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Current Weather
+          </Typography>
+
+          {weatherLoading ? (
+            <LoadingSpinnerModern variant="gradient-ring" size="md" />
+          ) : weather ? (
+            <WeatherDetails weather={weather} theme={theme} />
+          ) : (
+            <Typography color="text.secondary">
+              Weather data unavailable
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stats */}
+      <Stack direction="column" spacing={2} sx={{ flex: 1 }}>
+        {statRows.map((row: any[], i: number) => (
+          <Stack direction="row" spacing={2} key={i}>
+            {row.map(([key, data]: any) => (
+              <StatCard key={key} title={key} data={data} theme={theme} />
+            ))}
+          </Stack>
+        ))}
+      </Stack>
+    </Stack>
+  );
+});
+
+function WeatherDetails({ weather, theme }: any) {
+  return (
+    <Stack spacing={2}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Typography variant="h3" sx={{ color: theme.palette.info.main }}>
+          {weather.temp}°C
+        </Typography>
+        <img
+          src={getWeatherIconUrl(weather.icon)}
+          alt={weather.condition}
+          width={60}
+        />
+      </Box>
+
+      <Typography>{weather.condition}</Typography>
+      <Typography>Humidity: {weather.humidity}%</Typography>
+      <Typography>Rain: {weather.rainfall}mm</Typography>
+      <Typography>Location: {weather.location}</Typography>
+    </Stack>
+  );
+}
+
+const StatCard = React.memo(function StatCard({
   title,
   data,
   theme,
@@ -657,56 +485,160 @@ function StatCard({
   const deltaToken = positive ? "success" : "error";
 
   return (
-    <Card
-      sx={{
-        width: { xs: "100%", sm: "48%" },
-        maxWidth: { xs: "100%", sm: "48%" },
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 140,
-        boxSizing: "border-box",
-      }}
-    >
-      <CardContent
-        sx={{
-          textAlign: "center",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-        }}
-      >
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ textTransform: "capitalize" }}
-        >
-          {title.replace(/([A-Z])/g, " $1").trim()}
+    <Card sx={{ flex: 1 }}>
+      <CardContent sx={{ textAlign: "center" }}>
+        <Typography variant="body2" color="text.secondary">
+          {title.replace(/([A-Z])/g, " $1")}
         </Typography>
 
         <Typography
           variant="h5"
-          sx={{ fontWeight: 700, mt: 1, color: (t) => t.palette.primary.main }}
+          sx={{ color: theme.palette.primary.main, mt: 1 }}
         >
           {data.count}
         </Typography>
 
         <Box
           sx={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 0.5,
-            mt: 1.5,
-            color: (t) => (t.palette as any)[deltaToken].main,
-            alignSelf: "center",
+            mt: 1,
+            color: (t) => t.palette[deltaToken].main,
+            display: "flex",
+            justifyContent: "center",
+            gap: 1,
           }}
         >
           {positive ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
-          <Typography variant="caption" sx={{ fontWeight: 500 }}>
+          <Typography variant="caption">
             {data.change.replace(/^[+-]/, "")} from yesterday
           </Typography>
         </Box>
       </CardContent>
     </Card>
   );
-}
+});
+
+const FloodPrediction = React.memo(function FloodPrediction({
+  floodLevels,
+  theme,
+}: any) {
+  const pct = (value: number) => `${Math.min(100, (value / 8) * 100)}%`;
+
+  return (
+    <Stack direction={{ xs: "column", lg: "row" }} spacing={3}>
+      <Card sx={{ flex: 1 }}>
+        <CardContent>
+          <iframe
+            src="https://thingspeak.com/channels/2901817/charts/1?bgcolor=%23ffffff&color=%230072bd&dynamic=true&type=line&update=15"
+            style={{
+              width: "100%",
+              height: 310,
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card sx={{ flex: 1 }}>
+        <CardContent>
+          <Typography variant="h6">Flood Level Predictions</Typography>
+
+          <Box sx={{ mt: 2 }}>
+            <Typography>Current</Typography>
+            <Box sx={{ height: 10, bgcolor: theme.palette.success.main, width: pct(floodLevels.current) }} />
+          </Box>
+
+          <Box sx={{ mt: 2 }}>
+            <Typography>Predicted</Typography>
+            <Box sx={{ height: 10, bgcolor: theme.palette.error.main, width: pct(floodLevels.predicted) }} />
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="body2">Time to Peak</Typography>
+            <Typography
+              variant="h6"
+              sx={{
+                color:
+                  floodLevels.timeToPeak === "Rising"
+                    ? theme.palette.error.main
+                    : theme.palette.info.main,
+              }}
+            >
+              {floodLevels.timeToPeak}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+    </Stack>
+  );
+});
+
+const Charts = () => (
+  <>
+    <LineChart
+      dataset={usUnemploymentRate}
+      xAxis={[
+        {
+          dataKey: "date",
+          scaleType: "time",
+          valueFormatter: dateAxisFormatter,
+        },
+      ]}
+      yAxis={[{ valueFormatter: percentageFormatter }]}
+      series={[
+        {
+          dataKey: "rate",
+          showMark: false,
+          valueFormatter: percentageFormatter,
+        },
+      ]}
+      height={300}
+    />
+
+    <hr style={{ margin: "16px 0" }} />
+
+    <LineChart
+      series={[
+        { data: [4000, 3000, 2000, 2780, 1890, 2390, 3490], label: "pv" },
+        { data: [2400, 1398, 9800, 3908, 4800, 3800, 4300], label: "uv" },
+      ]}
+      xAxis={[{ scaleType: "point", data: ["A", "B", "C", "D", "E", "F", "G"] }]}
+      height={300}
+    />
+  </>
+);
+
+const BroadcastDialog = ({
+  open,
+  message,
+  loading,
+  onClose,
+  onChange,
+  onSubmit,
+}: any) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>Send Emergency Broadcast</DialogTitle>
+    <DialogContent>
+      <TextField
+        fullWidth
+        multiline
+        rows={4}
+        label="Broadcast Message"
+        value={message}
+        onChange={onChange}
+      />
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+
+      <Button
+        onClick={onSubmit}
+        disabled={!message.trim() || loading}
+        variant="contained"
+        color="error"
+        startIcon={loading ? <CircularProgress size={18} /> : null}
+      >
+        {loading ? "Sending..." : "Send"}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);

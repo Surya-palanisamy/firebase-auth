@@ -24,7 +24,7 @@ export interface SettingsData {
   phone: string;
   theme: "light" | "dark" | "system";
   twoFactorEnabled: boolean;
-  photoURL?: string | null;
+  photoBase64?: string | null;   // IMPORTANT FIX
 }
 
 export const useSettings = () => {
@@ -37,115 +37,109 @@ export const useSettings = () => {
     phone: "",
     theme: "system",
     twoFactorEnabled: false,
-    photoURL: "",
+    photoBase64: "",
   });
 
   const [loading, setLoading] = useState(true);
 
-  // -------------------------------
-  // Fetch User + Firestore Profile
-  // -------------------------------
+  // LOAD FIRESTORE USER
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (!firebaseUser) {
+    const unsub = onAuthStateChanged(
+      auth,
+      async (firebaseUser: FirebaseUser | null) => {
+        if (!firebaseUser) {
+          setSettings({
+            fullName: "",
+            email: "",
+            phone: "",
+            theme: "system",
+            twoFactorEnabled: false,
+            photoBase64: "",
+          });
+          setLoading(false);
+          return;
+        }
+
+        const ref = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+
         setSettings({
-          fullName: "",
-          email: "",
-          phone: "",
-          theme: "system",
-          twoFactorEnabled: false,
-          photoURL: "",
+          fullName: data.fullName ?? firebaseUser.displayName ?? "",
+          email: data.email ?? firebaseUser.email ?? "",
+          phone: data.phone ?? "",
+          theme: data.theme ?? "system",
+          twoFactorEnabled: data.twoFactorEnabled ?? false,
+          photoBase64: data.photoBase64 ?? null, // FIXED
         });
+
         setLoading(false);
-        return;
       }
-
-      // Load Firestore profile
-      const ref = doc(db, "users", firebaseUser.uid);
-      const snap = await getDoc(ref);
-
-      const stored = snap.exists() ? snap.data() : {};
-
-      setSettings({
-        fullName: firebaseUser.displayName || stored.fullName || "",
-        email: firebaseUser.email || stored.email || "",
-        phone: stored.phone || "",
-        theme: stored.theme || "system",
-        twoFactorEnabled: stored.twoFactorEnabled || false,
-        photoURL: firebaseUser.photoURL || stored.photoURL || "",
-      });
-
-      setLoading(false);
-    });
+    );
 
     return () => unsub();
   }, []);
 
-  // -------------------------------
-  // Save Account Settings
-  // -------------------------------
-  const saveAccountSettings = useCallback(
-    async (data: { fullName: string; email: string; phone: string; avatarBase64?: string | null }) => {
+  // SAVE PROFILE
+  const saveProfile = useCallback(
+    async (data: {
+      fullName: string;
+      email: string;
+      phone: string;
+      avatarBase64?: string | null;
+    }) => {
       try {
+        const user = auth.currentUser;
+        if (!user) return false;
+
         setLoading(true);
 
-        if (!auth.currentUser) return false;
+        // Update Auth basic details
+        await updateProfile(user, { displayName: data.fullName });
 
-        const user = auth.currentUser;
-        const userRef = doc(db, "users", user.uid);
+        if (data.email !== user.email) {
+          await updateEmail(user, data.email);
+        }
 
-        // update Firebase Auth name + avatar
-        await updateProfile(user, {
-          displayName: data.fullName,
-          photoURL: data.avatarBase64 || user.photoURL || null,
-        });
+        const ref = doc(db, "users", user.uid);
 
-        // update email in Firebase Auth
-        if (data.email !== user.email) await updateEmail(user, data.email);
-
-        // update Firestore profile
         await setDoc(
-          userRef,
+          ref,
           {
-            uid: user.uid,
             fullName: data.fullName,
             email: data.email,
             phone: data.phone,
-            photoURL: data.avatarBase64 || user.photoURL || null,
+            photoBase64: data.avatarBase64 ?? undefined, // FIXED
             updatedAt: serverTimestamp(),
           },
-          { merge: true },
+          { merge: true }
         );
 
-        // update UI instantly
+        // Update UI instantly
         setSettings((prev) => ({
           ...prev,
           fullName: data.fullName,
           email: data.email,
           phone: data.phone,
-          photoURL: data.avatarBase64 || prev.photoURL,
+          photoBase64: data.avatarBase64 ?? prev.photoBase64,
         }));
 
         setLoading(false);
         return true;
       } catch (err) {
-        console.error("Error saving account:", err);
+        console.error("Profile update error:", err);
         setLoading(false);
         return false;
       }
     },
-    [],
+    []
   );
 
-  // -------------------------------
-  // Save Preferences (Theme)
-  // -------------------------------
   const savePreferences = useCallback(async (data: { theme: string }) => {
     try {
       if (!auth.currentUser) return false;
-      const user = auth.currentUser;
-      const ref = doc(db, "users", user.uid);
 
+      const ref = doc(db, "users", auth.currentUser.uid);
       await updateDoc(ref, { theme: data.theme });
 
       setSettings((prev) => ({ ...prev, theme: data.theme as any }));
@@ -156,19 +150,12 @@ export const useSettings = () => {
     }
   }, []);
 
-  // -------------------------------
-  // Save Security Settings
-  // -------------------------------
-  const saveSecuritySettings = useCallback(async (data: any) => {
+  const saveSecurity = useCallback(async (data: any) => {
     try {
       if (!auth.currentUser) return false;
 
-      const user = auth.currentUser;
-      const ref = doc(db, "users", user.uid);
-
-      await updateDoc(ref, {
-        twoFactorEnabled: data.twoFactorEnabled,
-      });
+      const ref = doc(db, "users", auth.currentUser.uid);
+      await updateDoc(ref, { twoFactorEnabled: data.twoFactorEnabled });
 
       setSettings((prev) => ({
         ...prev,
@@ -185,8 +172,8 @@ export const useSettings = () => {
   return {
     settings,
     loading,
-    saveAccountSettings,
+    saveProfile,
     savePreferences,
-    saveSecuritySettings,
+    saveSecurity,
   };
 };
