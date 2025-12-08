@@ -913,61 +913,14 @@ export default function SafeRoutes() {
 
   if (isLoading) return <LoadingSpinner />;
 
-  const getSavedMode = () =>
-    typeof window !== "undefined"
-      ? localStorage.getItem("theme-mode")
-      : "light";
-
-  const [isDark, setIsDark] = useState<boolean>(
-    () => getSavedMode() === "dark"
-  );
-
-  // Sync handler for storage events (other tabs/windows)
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "theme-mode") {
-        setIsDark((e.newValue || "light") === "dark");
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const root = document.documentElement;
-    const attrMode = root.getAttribute("data-mui-color-scheme");
-    if (attrMode) setIsDark(attrMode === "dark");
-
-    const mo = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (
-          m.type === "attributes" &&
-          m.attributeName === "data-mui-color-scheme"
-        ) {
-          const val = root.getAttribute("data-mui-color-scheme") || "light";
-          setIsDark(val === "dark");
-        }
-      }
-    });
-
-    mo.observe(root, {
-      attributes: true,
-      attributeFilter: ["data-mui-color-scheme"],
-    });
-
-    return () => mo.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const saved = getSavedMode();
-    if ((saved === "dark") !== isDark) setIsDark(saved === "dark");
-  }, []);
-
-  const panelBg = isDark ? "#0A0F1F" : "#F5F7FA";
+  /* ---------- Theme colors helpers (do not alter layout) ---------- */
+  const panelBg = "hsl(220, 30%, 6%)";
+  const pageBg = "red";
   const textPrimary = "";
   const textSecondary = "";
   const subtleBorder = "";
 
+  /* ---------- Filtered routes for list (keeps your layout) ---------- */
   const filteredRoutes = routes.filter((route) => {
     const matchesSearch =
       searchQuery === "" ||
@@ -1031,7 +984,9 @@ export default function SafeRoutes() {
           {/* Map Controls card */}
           <div
             style={{
+              background: "",
               borderRadius: 12,
+              border: `1px solid ${subtleBorder}`,
               padding: 16,
             }}
           >
@@ -1936,7 +1891,7 @@ export default function SafeRoutes() {
                   minHeight: 140,
                   padding: 12,
                   borderRadius: 8,
-                  border: "1px solid " + subtleBorder,
+                  border: `1px solid ${subtleBorder}`,
                   color: textPrimary,
                 }}
               />

@@ -120,3 +120,200 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: inherit !important;
   transition: background-color 9999s ease-in-out 0s;
 }
+
+
+/* ===== Map sidebar + panels: follow MUI dark scheme ===== */
+/* target the sidebar wrapper we added above */
+html[data-mui-color-scheme="dark"] .map-sidebar {
+  background-color: #071018 !important;    /* dark sidebar base */
+  color: #e6eef6 !important;
+  border-right: 1px solid rgba(255,255,255,0.04) !important;
+}
+
+/* override internal white panels inside the sidebar (list items, cards, inputs) */
+html[data-mui-color-scheme="dark"] .map-sidebar .bg-white,
+html[data-mui-color-scheme="dark"] .map-sidebar .bg-gray-50 {
+  background-color: #081019 !important;   /* subtle contrast */
+  color: #e6eef6 !important;
+  border-color: rgba(255,255,255,0.04) !important;
+  box-shadow: none !important;
+}
+
+/* ensure text/labels/secondary text show up */
+html[data-mui-color-scheme="dark"] .map-sidebar .text-gray-600,
+html[data-mui-color-scheme="dark"] .map-sidebar .text-gray-500,
+html[data-mui-color-scheme="dark"] .map-sidebar .text-gray-400 {
+  color: rgba(230, 238, 246, 0.75) !important;
+}
+
+/* inputs/selects inside sidebar */
+html[data-mui-color-scheme="dark"] .map-sidebar input,
+html[data-mui-color-scheme="dark"] .map-sidebar select,
+html[data-mui-color-scheme="dark"] .map-sidebar .MuiOutlinedInput-root {
+  background-color: #0b1720 !important;
+  color: #e6eef6 !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+}
+
+/* override leaflet popups + controls to match dark mode */
+html[data-mui-color-scheme="dark"] .leaflet-popup-content-wrapper,
+html[data-mui-color-scheme="dark"] .leaflet-popup-tip,
+html[data-mui-color-scheme="dark"] .leaflet-control,
+html[data-mui-color-scheme="dark"] .leaflet-control a,
+html[data-mui-color-scheme="dark"] .leaflet-control .leaflet-bar {
+  background: #071018 !important;
+  color: #e6eef6 !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* popup text readability */
+html[data-mui-color-scheme="dark"] .leaflet-popup-content-wrapper p,
+html[data-mui-color-scheme="dark"] .leaflet-popup-content-wrapper h3 {
+  color: #e6eef6 !important;
+}
+
+/* Leaflet attribution box */
+html[data-mui-color-scheme="dark"] .leaflet-control-attribution {
+  background: rgba(0,0,0,0.35) !important;
+  color: rgba(230,238,246,0.7) !important;
+}
+
+/* Map controls panel (the white action buttons in top-right) */
+html[data-mui-color-scheme="dark"] .map-controls,
+html[data-mui-color-scheme="dark"] .map-controls .bg-white {
+  background: rgba(10, 18, 24, 0.9) !important;
+  color: #e6eef6 !important;
+  border: 1px solid rgba(255,255,255,0.04) !important;
+}
+
+/* small helper to make sure any .panel-like cards inside sidebar visually match */
+html[data-mui-color-scheme="dark"] .map-sidebar .rounded-lg {
+  background-clip: padding-box;
+}
+
+/* globals.css (append) */
+
+/* ---------- SIDEBAR & RESIZER ---------- */
+
+/* Ensure sidebar doesn't change background on hover (no white hover) */
+/* We intentionally do NOT add any :hover background rules here. */
+
+/* Make items that are clickable show pointer cursor */
+.map-sidebar .sidebar-item,
+.map-sidebar .clickable,
+.map-sidebar button,
+.map-sidebar select,
+.map-sidebar .area-card,
+.map-sidebar .severity-btn {
+  cursor: pointer;
+}
+
+/* But keep non-interactive text default cursor */
+.map-sidebar .no-pointer {
+  cursor: default;
+}
+
+/* Resizer bar style (left sidebar) */
+.sidebar-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 120ms linear;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+.sidebar-resizer:hover {
+  background: rgba(255,255,255,0.04);
+}
+.sidebar-resizer.dragging {
+  background: rgba(255,255,255,0.08);
+}
+
+/* polishing select appearance when on dark sidebar */
+.map-sidebar select.custom-select {
+  background: transparent ;
+  color: inherit;
+}
+
+/* keep severity buttons styled but without hover white */
+.map-sidebar .severity-btn {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+/* small utility to prevent pointer on inner icons when needed */
+.map-sidebar .icon-no-pointer {
+  pointer-events: none;
+}
+
+
+/* globals.css additions */
+
+/* Keep pointer cursor on interactive sidebar items */
+.map-sidebar .sidebar-item,
+.map-sidebar .clickable,
+.map-sidebar button,
+.map-sidebar select,
+.map-sidebar .area-card,
+.map-sidebar .severity-btn {
+  cursor: pointer;
+}
+
+/* Resizer bar style (desktop) */
+.sidebar-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+.sidebar-resizer:hover { background: rgba(255,255,255,0.04); }
+.sidebar-resizer.dragging { background: rgba(255,255,255,0.08); }
+
+/* MOBILE: when the sidebar is opened as an overlay */
+.map-sidebar.mobile {
+  position: fixed;
+  inset: 0 auto 0 0; /* anchor left */
+  height: 100vh;
+  z-index: 60;
+  transform: translateX(-8%); /* small offset for appearance; overwritten by .open */
+  transition: transform 220ms ease;
+  width: 80%;
+  max-width: 420px;
+  box-shadow: 0 8px 24px rgba(2,6,23,0.6);
+}
+.map-sidebar.mobile.open {
+  transform: translateX(0);
+}
+
+/* overlay that covers the map when sidebar is open on mobile */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0,0,0,0.45);
+}
+
+/* hide desktop resizer on small screens */
+@media (max-width: 768px) {
+  .sidebar-resizer { display: none; }
+}
+
+/* hamburger button on map (mobile) */
+.map-hamburger {
+  display: none;
+}
+@media (max-width: 768px) {
+  .map-hamburger { display: inline-flex; }
+}
+
+/* improved select appearance on dark sidebar */
+.map-sidebar select.custom-select {
+  background: transparent;
+  color: inherit;
+}
+
+/* severity buttons keep no-hover background change */
+.map-sidebar .severity-btn { transition: background-color 120ms ease, color 120ms ease; }

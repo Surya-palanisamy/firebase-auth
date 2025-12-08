@@ -137,6 +137,7 @@ export default function Shelters() {
         </Stack>
       </Box>
 
+      
       {/* Stats Grid */}
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
         {shelterStats.map((stat, index) => (

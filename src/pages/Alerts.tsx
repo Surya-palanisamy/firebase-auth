@@ -247,7 +247,6 @@ export default function Alerts() {
                   sx={{
                     p: 1.5,
                     borderRadius: "50%",
-                    bgcolor: `${theme.palette[stat.color].main}20`,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
