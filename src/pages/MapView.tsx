@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUp,
   BarChart3,
+  ArrowLeft,
   Check,
   Droplets,
   Home,
