@@ -15,7 +15,7 @@ import {
   Stack,
   TextField,
   Typography,
-  useTheme
+  useTheme,
 } from "@mui/material";
 import React, {
   FormEvent,
@@ -30,12 +30,7 @@ import { styled } from "@mui/material/styles";
 
 import { LineChart } from "@mui/x-charts/LineChart";
 
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  RefreshCw
-} from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
 
 import axios from "axios";
 import LoadingSpinnerModern from "../components/LoadingSpinner";
@@ -65,12 +60,7 @@ const LOCATION_OPTIONS = [
   "South Bay",
 ];
 
-const SEVERITY_OPTIONS = [
-  "All Severity Levels",
-  "High",
-  "Moderate",
-  "Low",
-];
+const SEVERITY_OPTIONS = ["All Severity Levels", "High", "Moderate", "Low"];
 
 // Tooltip styling memoized outside component
 const BootstrapTooltip = styled(({ className, ...props }: TooltipProps) => (
@@ -277,7 +267,6 @@ export default function Dashboard() {
   );
 }
 
-
 const Header = React.memo(function Header({
   userName,
   refreshing,
@@ -307,7 +296,9 @@ const Header = React.memo(function Header({
         <Button
           onClick={onRefresh}
           disabled={refreshing}
-          startIcon={refreshing ? <CircularProgress size={18} /> : <RefreshCw />}
+          startIcon={
+            refreshing ? <CircularProgress size={18} /> : <RefreshCw />
+          }
           variant="outlined"
           sx={{ textTransform: "capitalize", p: 2 }}
         >
@@ -337,7 +328,9 @@ const Filters = React.memo(function Filters({
   return (
     <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
       <FormControl sx={{ minWidth: 200 }}>
-        <InputLabel>Location</InputLabel>
+        <Box sx={{ mb: 1 }}>
+          <InputLabel>Location</InputLabel>
+        </Box>
         <Select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
@@ -351,7 +344,9 @@ const Filters = React.memo(function Filters({
       </FormControl>
 
       <FormControl sx={{ minWidth: 200 }}>
-        <InputLabel>Severity</InputLabel>
+        <Box sx={{ mb: 1 }}>
+          <InputLabel>Severity</InputLabel>
+        </Box>
         <Select
           value={selectedSeverity}
           onChange={(e) => setSelectedSeverity(e.target.value)}
@@ -537,12 +532,24 @@ const FloodPrediction = React.memo(function FloodPrediction({
 
           <Box sx={{ mt: 2 }}>
             <Typography>Current</Typography>
-            <Box sx={{ height: 10, bgcolor: theme.palette.success.main, width: pct(floodLevels.current) }} />
+            <Box
+              sx={{
+                height: 10,
+                bgcolor: theme.palette.success.main,
+                width: pct(floodLevels.current),
+              }}
+            />
           </Box>
 
           <Box sx={{ mt: 2 }}>
             <Typography>Predicted</Typography>
-            <Box sx={{ height: 10, bgcolor: theme.palette.error.main, width: pct(floodLevels.predicted) }} />
+            <Box
+              sx={{
+                height: 10,
+                bgcolor: theme.palette.error.main,
+                width: pct(floodLevels.predicted),
+              }}
+            />
           </Box>
 
           <Box sx={{ mt: 3 }}>
@@ -594,7 +601,9 @@ const Charts = () => (
         { data: [4000, 3000, 2000, 2780, 1890, 2390, 3490], label: "pv" },
         { data: [2400, 1398, 9800, 3908, 4800, 3800, 4300], label: "uv" },
       ]}
-      xAxis={[{ scaleType: "point", data: ["A", "B", "C", "D", "E", "F", "G"] }]}
+      xAxis={[
+        { scaleType: "point", data: ["A", "B", "C", "D", "E", "F", "G"] },
+      ]}
       height={300}
     />
   </>

@@ -115,7 +115,7 @@ function ChangeView({
 }
 
 export default function MapView() {
-  const { isLoading, refreshData, mapAlerts, addAlert, userLocation } =
+  const { isLoading, refreshData, addAlert, userLocation } =
     useAppContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("All Districts");
@@ -175,11 +175,7 @@ export default function MapView() {
   } | null>(null);
 
   // Set alerts from context
-  useEffect(() => {
-    if (mapAlerts.length > 0) {
-      setAlerts(mapAlerts);
-    }
-  }, [mapAlerts]);
+
 
   // Set user location as map center if available
   useEffect(() => {
@@ -1450,7 +1446,7 @@ export default function MapView() {
   }
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner  />;
   }
 
   return (
@@ -2106,7 +2102,7 @@ export default function MapView() {
                     position={shelter.coordinates}
                     icon={
                       new L.Icon({
-                        iconUrl: shelter.isOutsideFloodZone ? shelter : sjf, // Different icon for safe shelters
+                        iconUrl:  sjf, // Different icon for safe shelters
                         iconSize: [32, 32],
                         iconAnchor: [16, 32],
                       })

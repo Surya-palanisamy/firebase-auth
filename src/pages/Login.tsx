@@ -16,10 +16,6 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
   const { isAuthenticated } = useAppContext();
   const { user: firebaseUser, loading } = useAuth();
 
-  /**
-   * Redirect immediately if user is already logged in
-   * Prevents sidebar + login page appearing when user uses back button
-   */
   useEffect(() => {
     if (!loading && (isAuthenticated || firebaseUser)) {
       navigate("/", { replace: true });

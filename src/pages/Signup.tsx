@@ -27,7 +27,7 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 export default function Signup() {
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState(""); // ✅ NEW FIELD
+  const [phone, setPhone] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -71,8 +71,8 @@ export default function Signup() {
       setError("Please fill all fields");
       return false;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
       return false;
     }
     if (password !== confirmPassword) {

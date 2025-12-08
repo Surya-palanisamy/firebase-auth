@@ -911,7 +911,7 @@ export default function SafeRoutes() {
     });
   };
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner  />;
 
   /* ---------- Theme colors helpers (do not alter layout) ---------- */
   const panelBg = theme.palette.background.paper;
@@ -1335,11 +1335,7 @@ export default function SafeRoutes() {
               zoom={mapZoom}
               style={{ height: "100%", width: "100%" }}
               zoomControl={false}
-              whenReady={(event) => {
-                const map = event.target;
-                mapRef.current = map;
-                map.on("click", handleMapClick);
-              }}
+              
             >
               <ChangeView center={mapCenter} zoom={mapZoom} />
 
