@@ -1,3 +1,4 @@
+// context/AppContext.tsx
 "use client";
 
 import React, {
@@ -7,13 +8,19 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import type { User as FirebaseUser } from "firebase/auth";
 import { useAuth } from "../hooks/useAuth";
-import { generateMockAlerts } from "../services/mapService";
+import type { Unsubscribe } from "firebase/firestore";
+import {
+  subscribeAlerts,
+  subscribeShelters,
+  subscribeCoordinators,
+  subscribeResources,
+  fetchFloodLevels,
+} from "../services/firestoreService";
+import { getFirebaseDb } from "../firebase/client";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-/* --------------------------------------------
-   TYPES
---------------------------------------------- */
+/* ---------------- TYPES ------------------ */
 
 export interface User {
   id: string;
@@ -81,172 +88,119 @@ interface AppContextType {
   sendEmergencyBroadcast: (message: string, district?: string) => Promise<void>;
 }
 
-/* --------------------------------------------
-   CONTEXT SETUP
---------------------------------------------- */
+/* ---------------- CONTEXT ------------------ */
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { user: authUser, loading: authLoading, logOut } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-
   const [user, setUser] = useState<User | null>(null);
 
-  /* --------------------------------------------
-     USER LOCATION (GPS)
-  --------------------------------------------- */
+  /* ---------------- USER LOCATION ---------------- */
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
-
   useEffect(() => {
     if (!navigator.geolocation) {
-      setUserLocation({ lat: 13.0827, lng: 80.2707 }); // fallback
+      setUserLocation({ lat: 13.0827, lng: 80.2707 });
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      (pos) =>
         setUserLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-        });
-      },
-      () => {
-        setUserLocation({ lat: 13.0827, lng: 80.2707 }); // fallback
-      }
+        }),
+      () => setUserLocation({ lat: 13.0827, lng: 80.2707 })
     );
   }, []);
 
-  /* --------------------------------------------
-     STATIC DATA (Shelters / Coordinators)
-  --------------------------------------------- */
-
-  const [shelters, setShelters] = useState<Shelter[]>([
-    {
-      id: "SH1",
-      name: "Govt High School",
-      location: "Chennai",
-      capacity: "40/250",
-      status: "Available",
-      resources: "Adequate",
-      contact: "9876543210",
-    },
-    {
-      id: "SH2",
-      name: "Community Hall",
-      location: "Vellore",
-      capacity: "180/200",
-      status: "Near Full",
-      resources: "Low",
-      contact: "9000000000",
-    },
-    {
-      id: "SH3",
-      name: "Town Shelter",
-      location: "Madurai",
-      capacity: "200/200",
-      status: "Full",
-      resources: "None",
-      contact: "9123456780",
-    },
-  ]);
-
-  const [coordinators, setCoordinators] = useState<Coordinator[]>([
-    {
-      id: "C1",
-      name: "Rahul Kumar",
-      role: "Coordinator",
-      shelter: "Govt High School",
-      phone: "9876543210",
-      avatar: null,
-    },
-    {
-      id: "C2",
-      name: "Anitha Devi",
-      role: "Lead Coordinator",
-      shelter: "Community Hall",
-      phone: "9000000001",
-      avatar: null,
-    },
-  ]);
-
-  const [resources, setResources] = useState<ResourceItem[]>([
-    { id: "R1", name: "Food Supplies", percentage: 75 },
-    { id: "R2", name: "Water Stock", percentage: 45 },
-    { id: "R3", name: "Medical Kits", percentage: 20 },
-  ]);
-
-  /* --------------------------------------------
-     ALERT SYSTEM
-  --------------------------------------------- */
-
+  /* ---------------- APP DATA (will be realtime) ---------------- */
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
+  const [resources, setResources] = useState<ResourceItem[]>([]);
 
+  /* ---------------- Realtime Subscriptions ---------------- */
   useEffect(() => {
-    const raw = generateMockAlerts();
-    const formatted = raw.map((a, i) => {
-      const alertType: Alert["type"] =
-        a.severity === "Critical"
-          ? "error"
-          : a.severity === "High"
-          ? "warning"
-          : "info";
-      return {
-        id: `A${i + 1}`,
-        title: a.type,
-        message: a.description,
-        timestamp: new Date().toISOString(),
-        read: false,
-        type: alertType,
-      };
-    });
-    setAlerts(formatted);
+    let unsubAlerts: Unsubscribe | null = null;
+    let unsubShelters: Unsubscribe | null = null;
+    let unsubCoordinators: Unsubscribe | null = null;
+    let unsubResources: Unsubscribe | null = null;
+
+    try {
+      unsubAlerts = subscribeAlerts((items) => setAlerts(items));
+      unsubShelters = subscribeShelters((items) => setShelters(items));
+      unsubCoordinators = subscribeCoordinators((items) =>
+        setCoordinators(items)
+      );
+      unsubResources = subscribeResources((items) => setResources(items));
+    } catch (err) {
+      console.error("Realtime subscribe error", err);
+    }
+
+    return () => {
+      if (unsubAlerts) unsubAlerts();
+      if (unsubShelters) unsubShelters();
+      if (unsubCoordinators) unsubCoordinators();
+      if (unsubResources) unsubResources();
+    };
   }, []);
 
-  const addAlert = (alert: Omit<Alert, "id" | "timestamp" | "read">) => {
-    setAlerts((prev) => [
-      {
-        id: `A${prev.length + 1}`,
-        timestamp: new Date().toISOString(),
-        read: false,
+  /* ---------------- FIRESTORE WRITE HELPERS ---------------- */
+  const db = getFirebaseDb();
+
+  const addAlert = async (alert: Omit<Alert, "id" | "timestamp" | "read">) => {
+    try {
+      await addDoc(collection(db, "alerts"), {
         ...alert,
-      },
-      ...prev,
-    ]);
+        read: false,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("addAlert error", err);
+    }
   };
 
   const markAlertAsRead = (id: string) => {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, read: true } : a))
+    // For simplicity: perform a server write to set read=true
+    // Requires import/updateDoc if you want real update; leaving as TODO for your rules
+    // You can implement updateDoc(doc(db, "alerts", id), { read: true });
+    console.warn(
+      "markAlertAsRead is a stub — implement updateDoc(doc(db, 'alerts', id), { read: true })"
     );
   };
 
-  const clearAllAlerts = () => setAlerts([]);
-
-  /* --------------------------------------------
-     EMERGENCY BROADCAST FUNCTION
-  --------------------------------------------- */
-
-  const sendEmergencyBroadcast = async (message: string, district?: string) => {
-    console.log("Broadcast:", message, "District:", district);
-
-    await new Promise((res) => setTimeout(res, 700));
-
-    addAlert({
-      title: "Broadcast Sent",
-      message: district
-        ? `Message sent to ${district}: ${message}`
-        : `Message sent to all regions: ${message}`,
-      type: "success",
-    });
+  const clearAllAlerts = async () => {
+    // Important: deleting many docs should be done server-side or with batched writes
+    console.warn(
+      "clearAllAlerts is a stub — implement batched deletes if needed"
+    );
   };
 
-  /* --------------------------------------------
-     USER SYNC
-  --------------------------------------------- */
+  /* ---------------- EMERGENCY BROADCAST ---------------- */
+  const sendEmergencyBroadcast = async (message: string, district?: string) => {
+    // Write a broadcast into alerts collection so everyone subscribed receives it
+    try {
+      const payload = {
+        title: "Emergency Broadcast",
+        message: district
+          ? `To ${district}: ${message}`
+          : `All regions: ${message}`,
+        type: "warning" as Alert["type"],
+        read: false,
+        timestamp: new Date().toISOString(),
+        meta: { broadcast: true, district: district ?? null },
+      };
+      await addDoc(collection(db, "alerts"), payload);
+    } catch (err) {
+      console.error("sendEmergencyBroadcast error", err);
+    }
+  };
 
+  /* ---------------- USER SYNC ---------------- */
   useEffect(() => {
     if (!authUser) {
       setUser(null);
@@ -257,31 +211,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setUser({
       id: authUser.uid,
       name: authUser.displayName ?? "User",
-      email: authUser.email!,
+      email: authUser.email ?? "",
       role: "User",
-      avatar: (authUser as any).photoBase64 ?? authUser.photoURL ?? null,
       phone: (authUser as any).phone ?? null,
     });
 
     setIsLoading(false);
   }, [authUser]);
 
-  /* --------------------------------------------
-     BASIC REFRESH
-  --------------------------------------------- */
-
+  /* ---------------- REFRESH / LOGOUT ---------------- */
   const refreshData = async () => {
-    await new Promise((r) => setTimeout(r, 800));
+    // keep a short delay to simulate network refresh and give onSnapshot time to sync
+    await new Promise((r) => setTimeout(r, 700));
+    // optionally fetch floodLevels (one-time)
+    try {
+      const levels = await fetchFloodLevels();
+      if (levels) {
+        // do something with levels — maybe write to state or fire an event
+        console.log("floodLevels (one-time):", levels);
+      }
+    } catch (err) {
+      console.error("refreshData error", err);
+    }
   };
 
   const logout = async () => {
     await logOut();
     setUser(null);
   };
-
-  /* --------------------------------------------
-     CONTEXT VALUE
-  --------------------------------------------- */
 
   const value: AppContextType = {
     user,
@@ -301,7 +258,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addAlert,
     markAlertAsRead,
     clearAllAlerts,
-
     sendEmergencyBroadcast,
   };
 

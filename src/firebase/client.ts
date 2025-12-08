@@ -5,7 +5,7 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
-  type Firestore
+  type Firestore,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -37,17 +37,17 @@ const initializeFirebase = () => {
     });
 
     // Connect to emulators in dev mode
-    if (import.meta.env.DEV) {
-      try {
-        connectAuthEmulator(auth, "http://localhost:9099", {
-          disableWarnings: true,
-        });
-      } catch {}
+    // if (import.meta.env.DEV) {
+    //   try {
+    //     connectAuthEmulator(auth, "http://localhost:9099", {
+    //       disableWarnings: true,
+    //     });
+    //   } catch {}
 
-      try {
-        connectFirestoreEmulator(db, "localhost", 8080);
-      } catch {}
-    }
+    //   try {
+    //     connectFirestoreEmulator(db, "localhost", 8080);
+    //   } catch {}
+    // }
   }
 };
 

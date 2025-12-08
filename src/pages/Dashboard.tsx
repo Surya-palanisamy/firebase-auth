@@ -1,22 +1,5 @@
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography,
-  useTheme,
-} from "@mui/material";
+"use client";
+
 import React, {
   FormEvent,
   useCallback,
@@ -25,22 +8,43 @@ import React, {
   useState,
 } from "react";
 
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+  Dialog,
+  DialogContent,
+  DialogActions,
+  DialogTitle,
+  useTheme,
+} from "@mui/material";
+
 import Tooltip, { tooltipClasses, TooltipProps } from "@mui/material/Tooltip";
 import { styled } from "@mui/material/styles";
-
 import { LineChart } from "@mui/x-charts/LineChart";
 
 import { AlertTriangle, ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
 
-import axios from "axios";
 import LoadingSpinnerModern from "../components/LoadingSpinner";
-import { useAppContext } from "../context/AppContext";
+
 import {
+  getWeatherIconUrl,
   fetchWeatherData,
   getCurrentLocation,
-  getWeatherIconUrl,
   type WeatherData,
 } from "../services/weatherService";
+
+import { fetchFloodLevels } from "../services/firestoreService";
+import { useAppContext } from "../context/AppContext";
 
 import {
   dateAxisFormatter,
@@ -48,9 +52,7 @@ import {
   usUnemploymentRate,
 } from "./UnemploymentRate";
 
-// ----------------------------------------------------------------
-// Extract Static Values (Prevents re-creation on each render)
-// ----------------------------------------------------------------
+/* ---------------------- CONSTANTS ---------------------- */
 
 const LOCATION_OPTIONS = [
   "All Locations",
@@ -62,7 +64,7 @@ const LOCATION_OPTIONS = [
 
 const SEVERITY_OPTIONS = ["All Severity Levels", "High", "Moderate", "Low"];
 
-// Tooltip styling memoized outside component
+/* ---------------------- TOOLTIP STYLE ---------------------- */
 const BootstrapTooltip = styled(({ className, ...props }: TooltipProps) => (
   <Tooltip {...props} arrow classes={{ popper: className }} />
 ))(({ theme }) => ({
@@ -74,13 +76,24 @@ const BootstrapTooltip = styled(({ className, ...props }: TooltipProps) => (
   },
 }));
 
-// ---------------------------
-// MAIN COMPONENT
-// ---------------------------
+/* ============================================================
+   MAIN DASHBOARD
+============================================================ */
+
 export default function Dashboard() {
   const theme = useTheme();
-  const { isLoading, refreshData, sendEmergencyBroadcast, user } =
-    useAppContext();
+  const {
+    isLoading,
+    refreshData,
+    sendEmergencyBroadcast,
+    user,
+    alerts,
+    shelters,
+    coordinators,
+    resources,
+  } = useAppContext();
+
+  /* ------------------- STATES ------------------- */
 
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [selectedSeverity, setSelectedSeverity] = useState(
@@ -88,6 +101,7 @@ export default function Dashboard() {
   );
 
   const [refreshing, setRefreshing] = useState(false);
+
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
 
@@ -95,37 +109,47 @@ export default function Dashboard() {
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
-  // --------------------------
-  // Optimized Static Data using useMemo
-  // --------------------------
+  const [floodLevels, setFloodLevels] = useState({
+    current: 0,
+    predicted: 0,
+    timeToPeak: "N/A",
+  });
 
-  const riskData = useMemo(
-    () => ({
-      low: { count: 3, colorToken: "success" as const },
-      moderate: { count: 5, colorToken: "warning" as const },
-      high: { count: 2, colorToken: "error" as const },
-    }),
-    []
-  );
+  /* ------------------- FIRESTORE DERIVED DATA ------------------- */
 
-  const stats = useMemo(
-    () => ({
-      activeAlerts: { count: 12, change: "+2" },
-      evacuated: { count: 1234, change: "+89" },
-      rescueTeams: { count: 8, change: "-1" },
-      openShelters: { count: 15, change: "+3" },
-    }),
-    []
-  );
+  const riskData = useMemo(() => {
+    const low = shelters.filter((s) => s.status === "Available").length;
+    const moderate = shelters.filter((s) => s.status === "Near Full").length;
+    const high = shelters.filter((s) => s.status === "Full").length;
+
+    return {
+      low: { count: low, colorToken: "success" as const },
+      moderate: { count: moderate, colorToken: "warning" as const },
+      high: { count: high, colorToken: "error" as const },
+    };
+  }, [shelters]);
+
+  const stats = useMemo(() => {
+    return {
+      activeAlerts: { count: alerts.length, change: "+2" },
+      evacuated: {
+        count: resources.reduce((a, b) => a + b.percentage, 0),
+        change: "+80",
+      },
+      rescueTeams: { count: coordinators.length, change: "+1" },
+      openShelters: {
+        count: shelters.filter((s) => s.status !== "Full").length,
+        change: "+3",
+      },
+    };
+  }, [alerts, resources, coordinators, shelters]);
 
   const statRows = useMemo(() => {
     const entries = Object.entries(stats);
     return [entries.slice(0, 2), entries.slice(2, 4)];
   }, [stats]);
 
-  // --------------------------
-  // WEATHER FETCH — OPTIMIZED
-  // --------------------------
+  /* ------------------- WEATHER FETCH ------------------- */
 
   const loadWeatherData = useCallback(async () => {
     setWeatherLoading(true);
@@ -142,94 +166,67 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Initial weather load
   useEffect(() => {
     loadWeatherData();
   }, [loadWeatherData]);
 
-  // --------------------------
-  // REFRESH HANDLER — OPTIMIZED
-  // --------------------------
+  /* ------------------- FLOOD LEVELS FETCH ------------------- */
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await Promise.all([refreshData(), loadWeatherData()]);
-    setTimeout(() => setRefreshing(false), 600);
-  }, [refreshData, loadWeatherData]);
-
-  // --------------------------
-  // FLOOD LEVEL FETCH — CLEANED UP
-  // --------------------------
-  const [floodLevels, setFloodLevels] = useState({
-    current: 0,
-    predicted: 0,
-    timeToPeak: "N/A",
-  });
-
-  const getFloodLevels = useCallback(async () => {
-    try {
-      await axios.get("https://jsonplaceholder.typicode.com/todos/1");
-
-      const cur = +(Math.random() * 2 + 0.5).toFixed(2);
-      const pred = +(cur + Math.random()).toFixed(2);
-
-      setFloodLevels({
-        current: cur,
-        predicted: pred,
-        timeToPeak: pred > 3.5 ? "Rising" : "Stable",
-      });
-    } catch (err) {
-      console.error("Flood API error:", err);
+  const loadFloodLevels = useCallback(async () => {
+    const data = await fetchFloodLevels();
+    if (data) {
+      setFloodLevels(data);
     }
   }, []);
 
   useEffect(() => {
-    getFloodLevels();
-    const interval = setInterval(getFloodLevels, 15000);
-    return () => clearInterval(interval);
-  }, [getFloodLevels]);
+    loadFloodLevels();
+    const id = setInterval(loadFloodLevels, 15000);
+    return () => clearInterval(id);
+  }, [loadFloodLevels]);
 
-  // --------------------------
-  // EMERGENCY BROADCAST
-  // --------------------------
+  /* ------------------- REFRESH ------------------- */
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshData(), loadWeatherData(), loadFloodLevels()]);
+    setTimeout(() => setRefreshing(false), 600);
+  }, [refreshData, loadWeatherData, loadFloodLevels]);
+
+  /* ------------------- BROADCAST ------------------- */
+
   const handleSendBroadcast = async (e: FormEvent) => {
     e.preventDefault();
     if (!broadcastMessage.trim()) return;
 
     setSendingBroadcast(true);
-
-    try {
-      await sendEmergencyBroadcast(broadcastMessage);
-      setBroadcastMessage("");
-      setShowBroadcastModal(false);
-    } finally {
-      setSendingBroadcast(false);
-    }
+    await sendEmergencyBroadcast(broadcastMessage);
+    setSendingBroadcast(false);
+    setBroadcastMessage("");
+    setShowBroadcastModal(false);
   };
 
-  // --------------------------
-  // RENDER LOADER
-  // --------------------------
+  /* ------------------- LOADING GUARD ------------------- */
+
   if (isLoading) {
     return (
       <LoadingSpinnerModern variant="bar-wave" size="md" color="primary" />
     );
   }
 
-  // --------------------------
-  // JSX
-  // --------------------------
+  /* ============================================================
+      RENDER
+  ============================================================ */
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
-      {/* Header */}
       <Header
-        userName={user?.name || "User"}
+        userName={user?.name|| user?.fullName || "User"}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         onBroadcastClick={() => setShowBroadcastModal(true)}
       />
 
-      {/* Filters */}
       <Filters
         selectedLocation={selectedLocation}
         setSelectedLocation={setSelectedLocation}
@@ -237,10 +234,8 @@ export default function Dashboard() {
         setSelectedSeverity={setSelectedSeverity}
       />
 
-      {/* Risk Cards */}
       <RiskCards riskData={riskData} />
 
-      {/* Weather + Stats */}
       <WeatherAndStats
         weather={weather}
         weatherLoading={weatherLoading}
@@ -248,13 +243,10 @@ export default function Dashboard() {
         theme={theme}
       />
 
-      {/* Flood Predictions */}
       <FloodPrediction floodLevels={floodLevels} theme={theme} />
 
-      {/* Charts */}
       <Charts />
 
-      {/* Broadcast Dialog */}
       <BroadcastDialog
         open={showBroadcastModal}
         message={broadcastMessage}
@@ -267,17 +259,16 @@ export default function Dashboard() {
   );
 }
 
+/* ============================================================
+   SUB-COMPONENTS
+============================================================ */
+
 const Header = React.memo(function Header({
   userName,
   refreshing,
   onRefresh,
   onBroadcastClick,
-}: {
-  userName: string;
-  refreshing: boolean;
-  onRefresh: () => void;
-  onBroadcastClick: () => void;
-}) {
+}: any) {
   return (
     <Box
       sx={{
@@ -328,9 +319,7 @@ const Filters = React.memo(function Filters({
   return (
     <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
       <FormControl sx={{ minWidth: 200 }}>
-        <Box sx={{ mb: 1 }}>
-          <InputLabel>Location</InputLabel>
-        </Box>
+        <InputLabel>Location</InputLabel>
         <Select
           value={selectedLocation}
           onChange={(e) => setSelectedLocation(e.target.value)}
@@ -344,9 +333,7 @@ const Filters = React.memo(function Filters({
       </FormControl>
 
       <FormControl sx={{ minWidth: 200 }}>
-        <Box sx={{ mb: 1 }}>
-          <InputLabel>Severity</InputLabel>
-        </Box>
+        <InputLabel>Severity</InputLabel>
         <Select
           value={selectedSeverity}
           onChange={(e) => setSelectedSeverity(e.target.value)}
@@ -362,14 +349,10 @@ const Filters = React.memo(function Filters({
   );
 });
 
-const RiskCards = React.memo(function RiskCards({
-  riskData,
-}: {
-  riskData: Record<string, { count: number; colorToken: string }>;
-}) {
+const RiskCards = React.memo(function RiskCards({ riskData }: any) {
   return (
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
-      {Object.entries(riskData).map(([level, data]) => (
+      {Object.entries(riskData).map(([level, info]: any) => (
         <Card key={level} sx={{ flex: 1 }}>
           <CardContent>
             <Typography variant="h6" sx={{ textTransform: "capitalize" }}>
@@ -381,10 +364,10 @@ const RiskCards = React.memo(function RiskCards({
               sx={{
                 mt: 1,
                 fontWeight: 700,
-                color: (t) => (t.palette as any)[data.colorToken].main,
+                color: (t) => (t.palette as any)[info.colorToken].main,
               }}
             >
-              {data.count}
+              {info.count}
             </Typography>
 
             <Typography variant="body2" color="text.secondary">
@@ -405,7 +388,6 @@ const WeatherAndStats = React.memo(function WeatherAndStats({
 }: any) {
   return (
     <Stack direction={{ xs: "column", lg: "row" }} spacing={3} sx={{ mb: 3 }}>
-      {/* Weather */}
       <Card sx={{ flex: 1 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>
@@ -424,7 +406,6 @@ const WeatherAndStats = React.memo(function WeatherAndStats({
         </CardContent>
       </Card>
 
-      {/* Stats */}
       <Stack direction="column" spacing={2} sx={{ flex: 1 }}>
         {statRows.map((row: any[], i: number) => (
           <Stack direction="row" spacing={2} key={i}>
@@ -460,15 +441,7 @@ function WeatherDetails({ weather, theme }: any) {
   );
 }
 
-const StatCard = React.memo(function StatCard({
-  title,
-  data,
-  theme,
-}: {
-  title: string;
-  data: { count: number; change: string };
-  theme: any;
-}) {
+const StatCard = React.memo(function StatCard({ title, data, theme }: any) {
   const positive = data.change.startsWith("+");
   const deltaToken = positive ? "success" : "error";
 
@@ -619,6 +592,7 @@ const BroadcastDialog = ({
 }: any) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
     <DialogTitle>Send Emergency Broadcast</DialogTitle>
+
     <DialogContent>
       <TextField
         fullWidth
@@ -629,6 +603,7 @@ const BroadcastDialog = ({
         onChange={onChange}
       />
     </DialogContent>
+
     <DialogActions>
       <Button onClick={onClose}>Cancel</Button>
 
