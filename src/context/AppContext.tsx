@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { Unsubscribe } from "firebase/firestore";
+
 import {
   subscribeAlerts,
   subscribeShelters,
@@ -17,8 +18,19 @@ import {
   subscribeResources,
   fetchFloodLevels,
 } from "../services/firestoreService";
+
 import { getFirebaseDb } from "../firebase/client";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  getDocs,
+  query,
+  orderBy,
+  writeBatch,
+} from "firebase/firestore";
 
 /* ---------------- TYPES ------------------ */
 
@@ -94,6 +106,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { user: authUser, loading: authLoading, logOut } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
 
@@ -102,11 +115,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     lat: number;
     lng: number;
   } | null>(null);
+
   useEffect(() => {
     if (!navigator.geolocation) {
       setUserLocation({ lat: 13.0827, lng: 80.2707 });
       return;
     }
+
     navigator.geolocation.getCurrentPosition(
       (pos) =>
         setUserLocation({
@@ -117,7 +132,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     );
   }, []);
 
-  /* ---------------- APP DATA (will be realtime) ---------------- */
+  /* ---------------- APP DATA (Realtime) ---------------- */
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
@@ -142,16 +157,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return () => {
-      if (unsubAlerts) unsubAlerts();
-      if (unsubShelters) unsubShelters();
-      if (unsubCoordinators) unsubCoordinators();
-      if (unsubResources) unsubResources();
+      unsubAlerts && unsubAlerts();
+      unsubShelters && unsubShelters();
+      unsubCoordinators && unsubCoordinators();
+      unsubResources && unsubResources();
     };
   }, []);
 
   /* ---------------- FIRESTORE WRITE HELPERS ---------------- */
   const db = getFirebaseDb();
 
+  /** Add new alert */
   const addAlert = async (alert: Omit<Alert, "id" | "timestamp" | "read">) => {
     try {
       await addDoc(collection(db, "alerts"), {
@@ -164,25 +180,58 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const markAlertAsRead = (id: string) => {
-    // For simplicity: perform a server write to set read=true
-    // Requires import/updateDoc if you want real update; leaving as TODO for your rules
-    // You can implement updateDoc(doc(db, "alerts", id), { read: true });
-    console.warn(
-      "markAlertAsRead is a stub — implement updateDoc(doc(db, 'alerts', id), { read: true })"
+  /** Mark alert as read */
+  const markAlertAsRead = async (id: string) => {
+    // Optimistic UI update
+    setAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, read: true } : a))
     );
+
+    try {
+      await updateDoc(doc(db, "alerts", id), { read: true });
+    } catch (err) {
+      console.error("markAlertAsRead error:", err);
+
+      // rollback optimistic update
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, read: false } : a))
+      );
+    }
   };
 
+  /** Clear all alerts */
   const clearAllAlerts = async () => {
-    // Important: deleting many docs should be done server-side or with batched writes
-    console.warn(
-      "clearAllAlerts is a stub — implement batched deletes if needed"
-    );
+    try {
+      const q = query(collection(db, "alerts"), orderBy("timestamp", "desc"));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setAlerts([]);
+        return;
+      }
+
+      const chunkSize = 450;
+      const docs = snap.docs;
+
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + chunkSize);
+
+        chunk.forEach((d) => {
+          batch.delete(doc(db, "alerts", d.id));
+        });
+
+        await batch.commit();
+      }
+
+      setAlerts([]);
+    } catch (err) {
+      console.error("clearAllAlerts error:", err);
+    }
   };
 
   /* ---------------- EMERGENCY BROADCAST ---------------- */
   const sendEmergencyBroadcast = async (message: string, district?: string) => {
-    // Write a broadcast into alerts collection so everyone subscribed receives it
     try {
       const payload = {
         title: "Emergency Broadcast",
@@ -194,6 +243,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         timestamp: new Date().toISOString(),
         meta: { broadcast: true, district: district ?? null },
       };
+
       await addDoc(collection(db, "alerts"), payload);
     } catch (err) {
       console.error("sendEmergencyBroadcast error", err);
@@ -219,17 +269,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, [authUser]);
 
-  /* ---------------- REFRESH / LOGOUT ---------------- */
+  /* ---------------- REFRESH ---------------- */
   const refreshData = async () => {
-    // keep a short delay to simulate network refresh and give onSnapshot time to sync
     await new Promise((r) => setTimeout(r, 700));
-    // optionally fetch floodLevels (one-time)
+
     try {
       const levels = await fetchFloodLevels();
-      if (levels) {
-        // do something with levels — maybe write to state or fire an event
-        console.log("floodLevels (one-time):", levels);
-      }
+      console.log("floodLevels:", levels);
     } catch (err) {
       console.error("refreshData error", err);
     }
@@ -239,6 +285,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await logOut();
     setUser(null);
   };
+
+  /* ---------------- CONTEXT VALUE ---------------- */
 
   const value: AppContextType = {
     user,

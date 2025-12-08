@@ -1,14 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import {
   Box,
   Button,
   ClickAwayListener,
   IconButton,
+  InputAdornment,
   Paper,
   Popper,
+  TextField,
   Typography,
   useMediaQuery,
   useTheme,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import {
   AlertTriangle,
@@ -18,6 +22,7 @@ import {
   Info,
   MapPin,
   X,
+  Search as SearchIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
@@ -31,7 +36,24 @@ export default function Notifications() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
 
-  const unreadCount = alerts.filter((a) => !a.read).length;
+  // UI state
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(10); // initial items to show
+  const [optimisticReads, setOptimisticReads] = useState<
+    Record<string, boolean>
+  >({});
+
+  // derived
+  const unreadCount = useMemo(
+    () => alerts.filter((a) => !a.read && !optimisticReads[a.id]).length,
+    [alerts, optimisticReads]
+  );
+
+  // when context alerts change, ensure pageSize isn't too small
+  useEffect(() => {
+    if (alerts.length > 0 && pageSize < 10) setPageSize(10);
+  }, [alerts, pageSize]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -71,6 +93,7 @@ export default function Notifications() {
   };
 
   const formatTime = (timestamp: string) => {
+    if (!timestamp) return "";
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -84,11 +107,58 @@ export default function Notifications() {
     return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
   };
 
+  // Filter & search alerts
+  const filteredAlerts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return alerts
+      .filter((a) => {
+        if (showUnreadOnly && (a.read || optimisticReads[a.id])) return false;
+        if (!q) return true;
+        return (
+          (a.title || "").toLowerCase().includes(q) ||
+          (a.message || "").toLowerCase().includes(q) ||
+          (a.type || "").toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        // newest first
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tb - ta;
+      });
+  }, [alerts, showUnreadOnly, search, optimisticReads]);
+
+  // page slice
+  const visibleAlerts = filteredAlerts.slice(0, pageSize);
+
+  // mark as read (optimistic)
+  const handleMarkAsRead = async (id: string) => {
+    // optimistic local state so UI instantly reflects change
+    setOptimisticReads((prev) => ({ ...prev, [id]: true }));
+    try {
+      await markAlertAsRead(id);
+      // context will eventually reflect actual read state from firestore
+    } catch (err) {
+      // rollback on error
+      setOptimisticReads((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      console.error("markAlertAsRead failed", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    await clearAllAlerts();
+    setOpen(false);
+  };
+
   const handleNavigateToAlert = (alert: any) => {
     if (alert.coordinates) {
       navigate("/map");
       setOpen(false);
-      markAlertAsRead(alert.id);
+      handleMarkAsRead(alert.id);
       localStorage.setItem(
         "mapNavigationTarget",
         JSON.stringify({
@@ -100,6 +170,9 @@ export default function Notifications() {
       );
     }
   };
+
+  // load more
+  const loadMore = () => setPageSize((s) => s + 10);
 
   return (
     <Box
@@ -165,7 +238,6 @@ export default function Notifications() {
             name: "preventOverflow",
             options: { padding: 8, boundary: "viewport" },
           },
-          // keep computeStyles enabled so Popper positions correctly on mobile
         ]}
       >
         <ClickAwayListener onClickAway={() => setOpen(false)}>
@@ -174,17 +246,16 @@ export default function Notifications() {
             elevation={8}
             sx={{
               mt: isDesktop ? 0 : 1,
-              width: "auto", // allow popper to size itself
-              minWidth: isDesktop ? 360 : 100, // ensure a usable minimum on small screens
-              maxWidth: isDesktop ? 360 : "95vw", // never exceed viewport on small screens
-              maxHeight: isDesktop ? 480 : "60vh",
+              width: "auto",
+              minWidth: isDesktop ? 360 : 100,
+              maxWidth: isDesktop ? 520 : "95vw",
+              maxHeight: isDesktop ? 560 : "70vh",
               display: "flex",
               flexDirection: "column",
               bgcolor: "background.paper",
               borderRadius: 1,
               overflow: "hidden",
               border: (t) => `1px solid ${t.palette.divider}`,
-              // small visual nudge to keep popper away from edges on tiny screens:
               px: isDesktop ? 0 : 1,
             }}
           >
@@ -197,7 +268,8 @@ export default function Notifications() {
                 px: 2,
                 py: 1.25,
                 borderBottom: (t) => `1px solid ${t.palette.divider}`,
-                bgcolor: "background.paper",
+                gap: 2,
+                flexWrap: "wrap",
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -205,9 +277,37 @@ export default function Notifications() {
               </Typography>
 
               <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <TextField
+                  size="small"
+                  placeholder="Search notifications"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon size={14} />
+                      </InputAdornment>
+                    ),
+                    sx: { height: 36 },
+                  }}
+                  sx={{ minWidth: 180 }}
+                />
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showUnreadOnly}
+                      onChange={() => setShowUnreadOnly((s) => !s)}
+                      size="small"
+                    />
+                  }
+                  label="Unread"
+                  sx={{ ml: 0 }}
+                />
+
                 <Button
                   size="small"
-                  onClick={() => clearAllAlerts()}
+                  onClick={handleClearAll}
                   disabled={alerts.length === 0}
                   sx={{
                     textTransform: "none",
@@ -219,117 +319,148 @@ export default function Notifications() {
                   Clear All
                 </Button>
 
-                <Button
+                <IconButton
                   size="small"
                   onClick={() => setOpen(false)}
                   sx={{ color: "text.secondary", minWidth: "auto", p: 0.5 }}
                 >
                   <X size={16} />
-                </Button>
+                </IconButton>
               </Box>
             </Box>
 
             {/* list */}
             <Box sx={{ overflowY: "auto", flex: 1 }}>
-              {alerts.length === 0 ? (
+              {visibleAlerts.length === 0 ? (
                 <Box
                   sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
                 >
                   No notifications
                 </Box>
               ) : (
-                alerts.map((alert: any) => (
-                  <Box
-                    key={alert.id}
-                    className="notification-row"
-                    sx={{
-                      px: 2,
-                      py: 1.25,
-                      borderBottom: (t) => `1px solid ${t.palette.divider}`,
-                      bgcolor: !alert.read
-                        ? theme.palette.mode === "dark"
-                          ? "rgba(99,102,241,0.06)"
-                          : "rgba(59,130,246,0.06)"
-                        : "transparent",
-                      "&:hover": { bgcolor: "transparent !important" },
-                      display: "flex",
-                      gap: 2,
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <Box sx={{ mt: "4px" }}>{getAlertIcon(alert.type)}</Box>
+                visibleAlerts.map((alert: any) => {
+                  const isUnread = !alert.read && !optimisticReads[alert.id];
+                  return (
+                    <Box
+                      key={alert.id}
+                      className="notification-row"
+                      sx={{
+                        px: 2,
+                        py: 1.25,
+                        borderBottom: (t) => `1px solid ${t.palette.divider}`,
+                        bgcolor: isUnread
+                          ? theme.palette.mode === "dark"
+                            ? "rgba(99,102,241,0.06)"
+                            : "rgba(59,130,246,0.06)"
+                          : "transparent",
+                        "&:hover": { bgcolor: "transparent !important" },
+                        display: "flex",
+                        gap: 2,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <Box sx={{ mt: "4px" }}>{getAlertIcon(alert.type)}</Box>
 
-                    <Box sx={{ flex: 1 }}>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          gap: 1,
-                        }}
-                      >
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: 600, color: "text.primary" }}
+                      <Box sx={{ flex: 1 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: 1,
+                          }}
                         >
-                          {alert.title}
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: 600, color: "text.primary" }}
+                          >
+                            {alert.title}
+                          </Typography>
+
+                          {!alert.read && !optimisticReads[alert.id] && (
+                            <IconButton
+                              size="small"
+                              onClick={() => handleMarkAsRead(alert.id)}
+                              sx={{ color: "primary.main", p: 0.5 }}
+                              aria-label="Mark as read"
+                              disableRipple
+                            >
+                              <Check size={14} />
+                            </IconButton>
+                          )}
+                        </Box>
+
+                        <Typography
+                          variant="body2"
+                          sx={{ color: "text.secondary", mt: 0.5 }}
+                        >
+                          {alert.message}
                         </Typography>
 
-                        {!alert.read && (
-                          <IconButton
-                            size="small"
-                            onClick={() => markAlertAsRead(alert.id)}
-                            sx={{ color: "primary.main", p: 0.5 }}
-                            aria-label="Mark as read"
-                            disableRipple
-                          >
-                            <Check size={14} />
-                          </IconButton>
-                        )}
-                      </Box>
-
-                      <Typography
-                        variant="body2"
-                        sx={{ color: "text.secondary", mt: 0.5 }}
-                      >
-                        {alert.message}
-                      </Typography>
-
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mt: 1,
-                        }}
-                      >
-                        <Typography
-                          variant="caption"
-                          sx={{ color: "text.disabled" }}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mt: 1,
+                          }}
                         >
-                          {formatTime(alert.timestamp)}
-                        </Typography>
-
-                        {alert.coordinates && (
-                          <Button
-                            size="small"
-                            onClick={() => handleNavigateToAlert(alert)}
-                            sx={{
-                              textTransform: "none",
-                              color: "primary.main",
-                              minWidth: "auto",
-                              p: 0.5,
-                            }}
-                            disableRipple
+                          <Typography
+                            variant="caption"
+                            sx={{ color: "text.disabled" }}
                           >
-                            <MapPin size={12} style={{ marginRight: 6 }} />
-                            View on map
-                          </Button>
-                        )}
+                            {formatTime(alert.timestamp)}
+                          </Typography>
+
+                          {alert.coordinates && (
+                            <Button
+                              size="small"
+                              onClick={() => handleNavigateToAlert(alert)}
+                              sx={{
+                                textTransform: "none",
+                                color: "primary.main",
+                                minWidth: "auto",
+                                p: 0.5,
+                              }}
+                              disableRipple
+                            >
+                              <MapPin size={12} style={{ marginRight: 6 }} />
+                              View on map
+                            </Button>
+                          )}
+                        </Box>
                       </Box>
                     </Box>
-                  </Box>
-                ))
+                  );
+                })
+              )}
+            </Box>
+
+            {/* footer / load more */}
+            <Box
+              sx={{
+                p: 1.25,
+                borderTop: (t) => `1px solid ${t.palette.divider}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                Showing {Math.min(filteredAlerts.length, pageSize)} of{" "}
+                {filteredAlerts.length}
+              </Typography>
+
+              {filteredAlerts.length > pageSize ? (
+                <Button
+                  size="small"
+                  onClick={loadMore}
+                  sx={{ textTransform: "none" }}
+                >
+                  Load more
+                </Button>
+              ) : (
+                <Box sx={{ width: 84 }} />
               )}
             </Box>
           </Paper>
