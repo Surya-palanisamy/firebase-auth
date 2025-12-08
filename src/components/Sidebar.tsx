@@ -30,8 +30,7 @@ import {
   Settings,
   User,
 } from "lucide-react";
-import type React from "react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 
@@ -111,12 +110,16 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       : "hsl(222, 28%, 32%)";
 
   const isDark = theme.palette.mode === "dark";
-  const userInitials =
-    user?.name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase() || "U";
+  // ✔ Name & Avatar from Firebase Auth
+  const displayName = user?.name || "Users";
+  const avatarURL = user?.avatar || null;
+
+  // ✔ Initials if no avatar
+  const initials = displayName
+    .split(" ")
+    .map((segment: string) => segment[0])
+    .join("")
+    .toUpperCase();
 
   return (
     <Box
@@ -128,87 +131,87 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       }}
       className="app-sidebar"
     >
-      <Box sx={{ mb: 2 }}>
-        <Menu
-          id="profile-menu"
-          anchorEl={anchorEl}
-          open={profileMenuOpen}
-          onClose={handleProfileMenuClose}
-          anchorOrigin={{ vertical: "top", horizontal: "left" }}
-          transformOrigin={{ vertical: "bottom", horizontal: "left" }}
-          slotProps={{
-            paper: {
-              elevation: 10,
-              sx: {
-                width: 220,
-                borderRadius: 2,
-                overflow: "hidden",
-                boxShadow: theme.shadows[12],
-                mt: "-6px",
-              },
+      {/* Profile Menu */}
+      <Menu
+        id="profile-menu"
+        anchorEl={anchorEl}
+        open={profileMenuOpen}
+        onClose={handleProfileMenuClose}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+        transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+        slotProps={{
+          paper: {
+            elevation: 10,
+            sx: {
+              width: 220,
+              borderRadius: 2,
+              overflow: "hidden",
+              boxShadow: theme.shadows[12],
+              mt: "-6px",
+            },
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => handleMenuSelect("/profile")}
+          sx={{
+            px: 2,
+            py: 1.1,
+            bgcolor: "transparent",
+            "&:hover": {
+              bgcolor: isDark ? "rgba(255,255,255)" : "rgba(0,0,0,0.02)",
             },
           }}
         >
-          <MenuItem
-            onClick={() => handleMenuSelect("/profile")}
+          <User size={18} style={{ marginRight: 12 }} />
+          <Typography sx={{ fontSize: 13 }}>Profile</Typography>
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => handleMenuSelect("/settings")}
+          sx={{
+            px: 2,
+            py: 1.1,
+            bgcolor: "transparent",
+            "&:hover": {
+              bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+            },
+          }}
+        >
+          <Settings size={18} style={{ marginRight: 12 }} />
+          <Typography sx={{ fontSize: 13 }}>Settings</Typography>
+        </MenuItem>
+
+        <Divider sx={{ my: 0.5 }} />
+
+        <MenuItem
+          onClick={() => handleMenuSelect("/logout")}
+          sx={{
+            px: 2,
+            py: 1.1,
+            bgcolor: "transparent",
+            "&:hover": {
+              bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+            },
+          }}
+        >
+          <LogOut
+            size={18}
+            style={{ marginRight: 12, color: theme.palette.error.main }}
+          />
+          <Typography
             sx={{
-              px: 2,
-              py: 1.1,
-              bgcolor: "transparent",
-              "&:hover": {
-                bgcolor: isDark ? "rgba(255,255,255)" : "rgba(0,0,0,0.02)",
-              },
+              fontSize: 13,
+              color: theme.palette.error.main,
+              fontWeight: 600,
             }}
           >
-            <User size={18} style={{ marginRight: 12 }} />
-            <Typography sx={{ fontSize: 13 }}>Profile</Typography>
-          </MenuItem>
+            Log out
+          </Typography>
+        </MenuItem>
+      </Menu>
 
-          <MenuItem
-            onClick={() => handleMenuSelect("/settings")}
-            sx={{
-              px: 2,
-              py: 1.1,
-              bgcolor: "transparent",
-              "&:hover": {
-                bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-              },
-            }}
-          >
-            <Settings size={18} style={{ marginRight: 12 }} />
-            <Typography sx={{ fontSize: 13 }}>Settings</Typography>
-          </MenuItem>
-
-          <Divider sx={{ my: 0.5 }} />
-
-          <MenuItem
-            onClick={() => handleMenuSelect("/logout")}
-            sx={{
-              px: 2,
-              py: 1.1,
-              bgcolor: "transparent",
-              "&:hover": {
-                bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-              },
-            }}
-          >
-            <LogOut
-              size={18}
-              style={{ marginRight: 12, color: theme.palette.error.main }}
-            />
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: theme.palette.error.main,
-                fontWeight: 600,
-              }}
-            >
-              Log out
-            </Typography>
-          </MenuItem>
-        </Menu>
-      </Box>
-
+      {/* Overview Items */}
       <List
         subheader={
           <ListSubheader
@@ -246,7 +249,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 px: 1.6,
                 alignItems: "center",
                 transition: "all 0.18s ease-out",
-                backgroundColor: active ? "transparent" : "transparent",
                 ...(active && {
                   backgroundImage:
                     theme.palette.mode === "dark"
@@ -261,7 +263,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   backgroundColor: active
                     ? "transparent"
                     : theme.palette.action.hover,
-                  transform: active ? "translateY(-1px)" : "none",
                 },
               }}
             >
@@ -276,7 +277,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <NavIcon icon={item.icon} active={active} />
               </ListItemIcon>
 
-              {/* Use slotProps.primary instead of deprecated primaryTypographyProps */}
               <ListItemText
                 primary={item.label}
                 slotProps={{
@@ -287,7 +287,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       color: getLabelColor(active),
                       letterSpacing: 0.1,
                     },
-                  } as any, // cast if needed for typing; replace with proper TypographyProps import if desired
+                  } as any,
                 }}
               />
             </ListItemButton>
@@ -295,6 +295,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </List>
 
+      {/* General */}
       <List
         subheader={
           <ListSubheader
@@ -321,10 +322,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             justifyContent: "space-between",
             px: 1.6,
             py: 1.1,
-            color:
-              theme.palette.mode === "dark"
-                ? "hsl(220, 10%, 75%)"
-                : "hsl(220, 18%, 40%)",
             borderRadius: 2,
             "&:hover": {
               bgcolor: theme.palette.action.hover,
@@ -349,14 +346,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             >
               <LifeBuoy size={16} />
             </Box>
-            <Box
-              sx={{
-                fontWeight: 600,
-                fontSize: 13,
-              }}
-            >
-              Support
-            </Box>
+            <Box sx={{ fontWeight: 600, fontSize: 13 }}>Support</Box>
           </Box>
 
           {openGeneral ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -380,7 +370,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   mb: 0.5,
                   height: 40,
                   px: 1.6,
-                  transition: "all 0.18s ease-out",
                   ...(active && {
                     backgroundImage:
                       theme.palette.mode === "dark"
@@ -391,11 +380,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                         ? "0 8px 24px rgba(0,0,0,0.7)"
                         : "0 8px 24px rgba(15,23,42,0.16)",
                   }),
-                  "&:hover": {
-                    backgroundColor: active
-                      ? "transparent"
-                      : theme.palette.action.hover,
-                  },
                 }}
               >
                 <ListItemIcon
@@ -425,59 +409,61 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             );
           })}
         </Collapse>
-        <hr />
+        <Divider sx={{ my: 1 }} />
+
+        {/* USER PANEL (Avatar + Name + Email) */}
         <Box
           onClick={handleProfileMenuOpen}
           sx={{
             width: "100%",
             height: 56,
             p: 1,
-            bgcolor: "transparent !important",
             display: "flex",
             gap: 2,
             cursor: "pointer",
             alignItems: "center",
             borderRadius: 2,
           }}
-          aria-controls={profileMenuOpen ? "profile-menu" : undefined}
-          aria-haspopup="true"
-          aria-expanded={profileMenuOpen ? "true" : undefined}
         >
           <Avatar
+            src={avatarURL || undefined}
             sx={{
               width: 40,
-              height: 40,
+             height: 40,
               fontWeight: 700,
               fontSize: 14,
-              bgcolor: isDark
-                ? theme.palette.grey[800]
-                : theme.palette.primary.dark,
-        
+              bgcolor: !avatarURL
+                ? theme.palette.mode === "dark"
+                  ? theme.palette.grey[800]
+                  : theme.palette.primary.dark
+                : "transparent",
             }}
           >
-            {userInitials}
+            {!avatarURL && initials}
           </Avatar>
+
           <Box sx={{ flex: 1, textAlign: "left", minWidth: 0 }}>
             <Typography
               sx={{
-                fontSize: 13,
-
-                color: "red",
+                fontSize: 14,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
                 overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
-              {user?.name || "Admin User"}
+              {displayName}
             </Typography>
             <Typography
               sx={{
-                fontSize: 11,
+                fontSize: 14,
                 color: "green",
+                whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
               }}
             >
-              {user?.role || "Admin"}
+              {user?.email || "Unknown"}
             </Typography>
           </Box>
         </Box>

@@ -1,144 +1,192 @@
-import { useCallback, useState } from "react";
+"use client";
 
-export interface SettingsState {
-  // Account
+import { useEffect, useState, useCallback } from "react";
+import {
+  updateEmail,
+  updateProfile,
+  onAuthStateChanged,
+  type User as FirebaseUser,
+} from "firebase/auth";
+
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+
+import { getFirebaseAuth, getFirebaseDb } from "../firebase/client";
+
+export interface SettingsData {
   fullName: string;
   email: string;
   phone: string;
-  avatar: string | null;
-
-  // Preferences
   theme: "light" | "dark" | "system";
-
-  // Security
   twoFactorEnabled: boolean;
+  photoURL?: string | null;
 }
 
-export function useSettings() {
-  const [settings, setSettings] = useState<SettingsState>({
-    fullName: "Admin User",
-    email: "admin@floodwatch.com",
-    phone: "(+91) 1234567890",
-    avatar: null,
+export const useSettings = () => {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseDb();
+
+  const [settings, setSettings] = useState<SettingsData>({
+    fullName: "",
+    email: "",
+    phone: "",
     theme: "system",
     twoFactorEnabled: false,
+    photoURL: "",
   });
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // -------------------------------
+  // Fetch User + Firestore Profile
+  // -------------------------------
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (!firebaseUser) {
+        setSettings({
+          fullName: "",
+          email: "",
+          phone: "",
+          theme: "system",
+          twoFactorEnabled: false,
+          photoURL: "",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Load Firestore profile
+      const ref = doc(db, "users", firebaseUser.uid);
+      const snap = await getDoc(ref);
+
+      const stored = snap.exists() ? snap.data() : {};
+
+      setSettings({
+        fullName: firebaseUser.displayName || stored.fullName || "",
+        email: firebaseUser.email || stored.email || "",
+        phone: stored.phone || "",
+        theme: stored.theme || "system",
+        twoFactorEnabled: stored.twoFactorEnabled || false,
+        photoURL: firebaseUser.photoURL || stored.photoURL || "",
+      });
+
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  // -------------------------------
+  // Save Account Settings
+  // -------------------------------
   const saveAccountSettings = useCallback(
-    async (data: {
-      fullName: string;
-      email: string;
-      phone: string;
-      avatar?: string | null;
-    }) => {
-      setLoading(true);
-      setError(null);
-
+    async (data: { fullName: string; email: string; phone: string; avatarBase64?: string | null }) => {
       try {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        setLoading(true);
 
+        if (!auth.currentUser) return false;
+
+        const user = auth.currentUser;
+        const userRef = doc(db, "users", user.uid);
+
+        // update Firebase Auth name + avatar
+        await updateProfile(user, {
+          displayName: data.fullName,
+          photoURL: data.avatarBase64 || user.photoURL || null,
+        });
+
+        // update email in Firebase Auth
+        if (data.email !== user.email) await updateEmail(user, data.email);
+
+        // update Firestore profile
+        await setDoc(
+          userRef,
+          {
+            uid: user.uid,
+            fullName: data.fullName,
+            email: data.email,
+            phone: data.phone,
+            photoURL: data.avatarBase64 || user.photoURL || null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        // update UI instantly
         setSettings((prev) => ({
           ...prev,
           fullName: data.fullName,
           email: data.email,
           phone: data.phone,
-          avatar: data.avatar ?? prev.avatar,
+          photoURL: data.avatarBase64 || prev.photoURL,
         }));
 
+        setLoading(false);
         return true;
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to save account settings"
-        );
-        return false;
-      } finally {
+        console.error("Error saving account:", err);
         setLoading(false);
+        return false;
       }
     },
-    []
+    [],
   );
 
-  const savePreferences = useCallback(
-    async (data: { theme: "light" | "dark" | "system" }) => {
-      setLoading(true);
-      setError(null);
+  // -------------------------------
+  // Save Preferences (Theme)
+  // -------------------------------
+  const savePreferences = useCallback(async (data: { theme: string }) => {
+    try {
+      if (!auth.currentUser) return false;
+      const user = auth.currentUser;
+      const ref = doc(db, "users", user.uid);
 
-      try {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 600));
+      await updateDoc(ref, { theme: data.theme });
 
-        setSettings((prev) => ({
-          ...prev,
-          theme: data.theme,
-        }));
+      setSettings((prev) => ({ ...prev, theme: data.theme as any }));
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  }, []);
 
-        return true;
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to save preferences"
-        );
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  // -------------------------------
+  // Save Security Settings
+  // -------------------------------
+  const saveSecuritySettings = useCallback(async (data: any) => {
+    try {
+      if (!auth.currentUser) return false;
 
-  const saveSecuritySettings = useCallback(
-    async (data: {
-      currentPassword?: string;
-      newPassword?: string;
-      confirmPassword?: string;
-      twoFactorEnabled: boolean;
-    }) => {
-      setLoading(true);
-      setError(null);
+      const user = auth.currentUser;
+      const ref = doc(db, "users", user.uid);
 
-      try {
-        // Validate passwords if provided
-        if (data.newPassword) {
-          if (data.newPassword !== data.confirmPassword) {
-            throw new Error("Passwords do not match");
-          }
-          if (data.newPassword.length < 8) {
-            throw new Error("Password must be at least 8 characters");
-          }
-        }
+      await updateDoc(ref, {
+        twoFactorEnabled: data.twoFactorEnabled,
+      });
 
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      setSettings((prev) => ({
+        ...prev,
+        twoFactorEnabled: data.twoFactorEnabled,
+      }));
 
-        setSettings((prev) => ({
-          ...prev,
-          twoFactorEnabled: data.twoFactorEnabled,
-        }));
-
-        return true;
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to save security settings"
-        );
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  }, []);
 
   return {
     settings,
     loading,
-    error,
     saveAccountSettings,
     savePreferences,
     saveSecuritySettings,
   };
-}
+};

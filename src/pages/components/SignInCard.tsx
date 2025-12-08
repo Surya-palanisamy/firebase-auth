@@ -108,10 +108,11 @@ export default function SignInCard() {
         localStorage.removeItem("floodSenseEmail");
       }
 
-      // --- LOGIN: use Firebase Auth directly (integrated from your Login component) ---
+      // --- LOGIN: use Firebase Auth directly ---
       await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-      // on success navigate home
-      navigate("/");
+
+      // on success replace history so /login is removed from back-stack
+      navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Login error", err);
       // friendlier handling for common errors & emulator unreachable
@@ -130,13 +131,13 @@ export default function SignInCard() {
   };
 
   const handleGoogle = async () => {
-    // preserve UI behavior — if you have google login logic, call it here
     setFormError("");
     setIsLoading(true);
     try {
-      // placeholder: your existing loginWithGoogle from app context (if any)
+      // TODO: replace with your real Google login flow (example placeholder)
       // await loginWithGoogle();
-      navigate("/");
+      // on success:
+      navigate("/", { replace: true });
     } catch (err) {
       console.error("Google login error", err);
       setFormError("Google login failed");
@@ -256,7 +257,7 @@ export default function SignInCard() {
         <Typography sx={{ textAlign: "center" }}>
           Don&apos;t have an account?{" "}
           <span>
-            <Link href="/signup" variant="body2" sx={{ alignSelf: "center" }}>
+            <Link component="button" variant="body2" sx={{ alignSelf: "center" }} onClick={() => navigate("/signup")}>
               Sign up
             </Link>
           </span>

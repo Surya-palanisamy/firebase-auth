@@ -1,6 +1,13 @@
-import { initializeApp, type FirebaseApp } from "firebase/app"
-import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth"
-import { getFirestore, connectFirestoreEmulator, enableIndexedDbPersistence, type Firestore } from "firebase/firestore"
+import { initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
+import {
+  getFirestore,
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAzrUJw-OUnbFmz5d1pdUtWDSaIqAND1MI",
@@ -12,47 +19,45 @@ const firebaseConfig = {
   appId: "1:632693125006:web:19e04222fe3a230e103edf",
 };
 
-let app: FirebaseApp
-let auth: Auth
-let db: Firestore
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
 
 const initializeFirebase = () => {
   if (!app) {
-    app = initializeApp(firebaseConfig)
-    auth = getAuth(app)
-    db = getFirestore(app)
+    app = initializeApp(firebaseConfig);
 
-    // Enable persistence for offline support
-    enableIndexedDbPersistence(db).catch((err: any) => {
-      if (err.code === "failed-precondition") {
-        console.warn("Multiple tabs open, persistence can only be enabled in one tab at a time.")
-      } else if (err.code === "unimplemented") {
-        console.warn("The current browser does not support offline persistence")
-      }
-    })
+    // Auth
+    auth = getAuth(app);
 
-    // Connect to emulator if in development
+    // 🆕 Firestore with modern offline persistence
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(), // works across multiple tabs
+      }),
+    });
+
+    // Connect to emulators in dev mode
     if (import.meta.env.DEV) {
       try {
-        connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true })
-      } catch (e) {
-        // Already connected
-      }
+        connectAuthEmulator(auth, "http://localhost:9099", {
+          disableWarnings: true,
+        });
+      } catch {}
+
       try {
-        connectFirestoreEmulator(db, "localhost", 8080)
-      } catch (e) {
-        // Already connected
-      }
+        connectFirestoreEmulator(db, "localhost", 8080);
+      } catch {}
     }
   }
-}
+};
 
 export const getFirebaseAuth = (): Auth => {
-  initializeFirebase()
-  return auth
-}
+  initializeFirebase();
+  return auth;
+};
 
 export const getFirebaseDb = (): Firestore => {
-  initializeFirebase()
-  return db
-}
+  initializeFirebase();
+  return db;
+};

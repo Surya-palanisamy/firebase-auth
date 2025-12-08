@@ -1,28 +1,13 @@
 "use client"
-
 import type { Unsubscribe } from "firebase/firestore"
-import { async } from "rxjs"
-
-/**
- * Manages multiple Firestore unsubscribe functions for organized cleanup.
- * Prevents memory leaks from uncleaned listeners.
- */
 export class FirestoreListenerManager {
   private listeners: Map<string, Unsubscribe> = new Map()
-
-  /**
-   * Register a listener with a unique key for tracking
-   */
   subscribe(key: string, unsubscribe: Unsubscribe): void {
     if (this.listeners.has(key)) {
       this.listeners.get(key)?.()
     }
     this.listeners.set(key, unsubscribe)
   }
-
-  /**
-   * Unsubscribe from a specific listener
-   */
   unsubscribe(key: string): void {
     const unsub = this.listeners.get(key)
     if (unsub) {
@@ -31,9 +16,6 @@ export class FirestoreListenerManager {
     }
   }
 
-  /**
-   * Unsubscribe from all registered listeners
-   */
   unsubscribeAll(): void {
     for (const [, unsub] of this.listeners) {
       unsub()
@@ -75,17 +57,16 @@ export const createDocumentConverter = <T extends { id?: string }>() => ({
 /**
  * Batch multiple write operations for optimization
  */
-export const createFirestoreBatch = async <T>(\
-  operations: Array<() => Promise<void>>\
+export const createFirestoreBatch = async <T>(
+  operations: Array<() => Promise<void>>
 )
-: Promise<
-{
-  success: number
-  failed: number
-  errors: Error[]
-}
-> =>
-{
+  : Promise<
+    {
+      success: number
+      failed: number
+      errors: Error[]
+    }
+  > => {
   const results = { success: 0, failed: 0, errors: [] as Error[] }
 
   for (const operation of operations) {
@@ -130,28 +111,28 @@ export const isValidDocId = (id: string): boolean => {
 export const createDebouncedListener = <T>(
   callback: (data: T[]) => void,
   delayMs: number = 300
-) => {\
+) => {
   let timeoutId: NodeJS.Timeout | null = null
   let buffer: T[] = []
 
-  return {\
+  return {
     push: (data: T[]) => {
       buffer = data
-\
+
       if (timeoutId) clearTimeout(timeoutId)
 
       timeoutId = setTimeout(() => {
-        callback(buffer)\
+        callback(buffer)
         buffer = []
         timeoutId = null
       }, delayMs)
     },
-    cancel: () => {\
+    cancel: () => {
       if (timeoutId) {
-        clearTimeout(timeoutId)\
+        clearTimeout(timeoutId)
         timeoutId = null
       }
       buffer = []
     },
-  }\
+  }
 }

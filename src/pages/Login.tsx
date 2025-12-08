@@ -1,14 +1,35 @@
+// pages/Login.tsx
+"use client";
+
 import Stack from "@mui/material/Stack";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import ThemeToggler from "../components/ThemeToggler";
+import { useAppContext } from "../context/AppContext";
+import { useAuth } from "../hooks/useAuth";
 import AppTheme from "../shared-theme/AppTheme";
 import Content from "./components/Content";
 import SignInCard from "./components/SignInCard";
 
-export default function SignInSide(props: { disableCustomTheme?: boolean }) {
+export default function Login(props: { disableCustomTheme?: boolean }) {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAppContext();
+  const { user: firebaseUser, loading } = useAuth();
+
+  /**
+   * Redirect immediately if user is already logged in
+   * Prevents sidebar + login page appearing when user uses back button
+   */
+  useEffect(() => {
+    if (!loading && (isAuthenticated || firebaseUser)) {
+      navigate("/", { replace: true });
+    }
+  }, [loading, isAuthenticated, firebaseUser, navigate]);
+
   return (
     <AppTheme {...props}>
       <Stack sx={{ display: "flex", alignItems: "flex-end", pr: 10, pt: 2 }}>
-      <ThemeToggler />
+        <ThemeToggler />
       </Stack>
       <Stack
         direction="column"
@@ -18,7 +39,6 @@ export default function SignInSide(props: { disableCustomTheme?: boolean }) {
             justifyContent: "center",
             height: "calc((1 - var(--template-frame-height, 0)) * 100%)",
             marginTop: "0px",
-            
           },
           (theme) => ({
             "&::before": {

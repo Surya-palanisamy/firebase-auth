@@ -1,71 +1,78 @@
-"use client"
+"use client";
 
-import { Box, Button, useTheme } from "@mui/material"
-import { Droplets, Menu, X } from "lucide-react"
-import type React from "react"
-import { useEffect, useState } from "react"
-import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from "react-router-dom"
-import LoadingSpinner from "./components/LoadingSpinner"
-import Notifications from "./components/Notifications"
-import Sidebar from "./components/Sidebar"
-import ThemeToggler from "./components/ThemeToggler"
-import { AppProvider, useAppContext } from "./context/AppContext"
-import { useAuth } from "./hooks/useAuth"
-import Alerts from "./pages/Alerts"
-import Dashboard from "./pages/Dashboard"
-import EmergencyHelp from "./pages/EmergencyHelp"
-import Login from "./pages/Login"
-import MapView from "./pages/MapView"
-import SafeRoutes from "./pages/SafeRoutes"
-import SettingsPage from "./pages/SettingsPage"
-import Shelters from "./pages/Shelters"
-import Signup from "./pages/Signup"
+import { Box, Button, useTheme } from "@mui/material";
+import { Droplets, Menu, X } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
+import {
+  Navigate,
+  Route,
+  BrowserRouter as Router,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import LoadingSpinner from "./components/LoadingSpinner";
+import Notifications from "./components/Notifications";
+import Sidebar from "./components/Sidebar";
+import ThemeToggler from "./components/ThemeToggler";
+import { AppProvider, useAppContext } from "./context/AppContext";
+import { useAuth } from "./hooks/useAuth";
+import Alerts from "./pages/Alerts";
+import Dashboard from "./pages/Dashboard";
+import EmergencyHelp from "./pages/EmergencyHelp";
+import Login from "./pages/Login";
+import MapView from "./pages/MapView";
+import SafeRoutes from "./pages/SafeRoutes";
+import SettingsPage from "./pages/SettingsPage";
+import Shelters from "./pages/Shelters";
+import Signup from "./pages/Signup";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth()
-  const { isAuthenticated } = useAppContext()
-  const location = useLocation()
-  const navigate = useNavigate()
+  const { user, loading } = useAuth();
+  const { isAuthenticated } = useAppContext();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!user && !loading && !isAuthenticated) {
-      navigate("/login", { state: { from: location }, replace: true })
+      navigate("/login", { state: { from: location }, replace: true });
     }
-  }, [user, loading, isAuthenticated, location, navigate])
+  }, [user, loading, isAuthenticated, location, navigate]);
 
   if (loading) {
-    return <LoadingSpinner fullScreen />
+    return <LoadingSpinner fullScreen />;
   }
 
   if (!user && !isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>
-}
+  return <>{children}</>;
+};
 
 function AppContent() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const { isAuthenticated, user, logout, isLoading } = useAppContext()
-  const { user: firebaseUser } = useAuth()
-  const location = useLocation()
-  const muiTheme = useTheme()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isAuthenticated, user, logout, isLoading } = useAppContext();
+  const { user: firebaseUser, loading: firebaseLoading } = useAuth();
+  const location = useLocation();
+  const muiTheme = useTheme();
 
   useEffect(() => {
-    ;(window as any).__setIsMobileMenuOpen = setIsMobileMenuOpen
+    (window as any).__setIsMobileMenuOpen = setIsMobileMenuOpen;
     return () => {
-      delete (window as any).__setIsMobileMenuOpen
-    }
-  }, [])
+      delete (window as any).__setIsMobileMenuOpen;
+    };
+  }, []);
 
   useEffect(() => {
-    setIsMobileMenuOpen(false)
-  }, [location.pathname])
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const mobileMenu = document.querySelector('[data-mobile-menu="true"]')
-      const hamburgerButton = document.querySelector('[data-hamburger="true"]')
+      const mobileMenu = document.querySelector('[data-mobile-menu="true"]');
+      const hamburgerButton = document.querySelector('[data-hamburger="true"]');
 
       if (
         isMobileMenuOpen &&
@@ -74,24 +81,26 @@ function AppContent() {
         hamburgerButton &&
         !hamburgerButton.contains(event.target as Node)
       ) {
-        setIsMobileMenuOpen(false)
+        setIsMobileMenuOpen(false);
       }
-    }
+    };
 
-    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [isMobileMenuOpen])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isMobileMenuOpen]);
 
   const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen)
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  // Wait for both app-context loading and firebase loading to finish to avoid flicker
+  if (isLoading || firebaseLoading) {
+    return <LoadingSpinner fullScreen />;
   }
 
-  if (isLoading) {
-    return <LoadingSpinner fullScreen />
-  }
-
+  // If user not authenticated (both context and firebase), show only auth routes
   if (!isAuthenticated && !firebaseUser) {
     return (
       <Routes>
@@ -99,9 +108,11 @@ function AppContent() {
         <Route path="/signup" element={<Signup />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    )
+    );
   }
 
+  // Authenticated layout — IMPORTANT:
+  // Redirect /login and /signup to "/" so authenticated users never see login UI
   return (
     <Box
       sx={{
@@ -260,13 +271,16 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+
+          {/* Redirect auth pages when already signed in */}
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="/signup" element={<Navigate to="/" replace />} />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Box>
     </Box>
-  )
+  );
 }
 
 function App() {
@@ -276,7 +290,7 @@ function App() {
         <AppContent />
       </Router>
     </AppProvider>
-  )
+  );
 }
 
-export default App
+export default App;

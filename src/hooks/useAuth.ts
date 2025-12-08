@@ -1,104 +1,88 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useCallback } from "react"
 import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  createUserWithEmailAndPassword,
   type User as FirebaseUser,
-  onAuthStateChanged,
-} from "firebase/auth"
-import { getFirebaseAuth } from "../firebase/client"
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { useCallback, useEffect, useState } from "react";
+import { getFirebaseAuth, getFirebaseDb } from "../firebase/client";
 
 export interface AuthUser {
-  uid: string
-  email: string | null
-  displayName: string | null
+  uid: string;
+  email: string | null;
+  displayName: string | null;    // Firestore fullName
+  photoURL: string | null;       // Firestore avatar
+  phone: string | null;          // NEW
+  role: string | null;           // NEW
 }
 
-interface UseAuthReturn {
-  user: AuthUser | null
-  loading: boolean
-  error: string | null
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
-  logOut: () => Promise<void>
-}
-
-export const useAuth = (): UseAuthReturn => {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export const useAuth = () => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const auth = getFirebaseAuth()
-    let unsubscribe: (() => void) | undefined
+    const auth = getFirebaseAuth();
+    const db = getFirebaseDb();
 
-    try {
-      unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-        if (firebaseUser) {
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-          })
-        } else {
-          setUser(null)
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch Firestore user profile
+        const userRef = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(userRef);
+
+        let profile = null;
+
+        if (snap.exists()) {
+          profile = snap.data();
         }
-        setLoading(false)
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Auth error")
-      setLoading(false)
-    }
 
-    return () => {
-      if (unsubscribe) unsubscribe()
-    }
-  }, [])
+        // Merge Firebase Auth + Firestore data
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: profile?.fullName ?? firebaseUser.displayName ?? null,
+          photoURL: profile?.avatar ?? firebaseUser.photoURL ?? null,
+          phone: profile?.phone ?? null,
+          role: profile?.role ?? "User",
+        });
+      } catch (err) {
+        console.error("Failed to fetch user profile:", err);
+      }
 
-  const signIn = useCallback(async (email: string, password: string): Promise<void> => {
-    setError(null)
-    try {
-      const auth = getFirebaseAuth()
-      await signInWithEmailAndPassword(auth, email, password)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign in failed"
-      setError(message)
-      throw err
-    }
-  }, [])
+      setLoading(false);
+    });
 
-  const signUp = useCallback(async (email: string, password: string): Promise<void> => {
-    setError(null)
-    try {
-      const auth = getFirebaseAuth()
-      await createUserWithEmailAndPassword(auth, email, password)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign up failed"
-      setError(message)
-      throw err
-    }
-  }, [])
+    return () => unsubscribe();
+  }, []);
 
-  const logOut = useCallback(async (): Promise<void> => {
-    setError(null)
-    try {
-      const auth = getFirebaseAuth()
-      await signOut(auth)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign out failed"
-      setError(message)
-      throw err
-    }
-  }, [])
+  const signIn = useCallback(async (email: string, password: string) => {
+    setError(null);
+    const auth = getFirebaseAuth();
+    await signInWithEmailAndPassword(auth, email, password);
+  }, []);
 
-  return {
-    user,
-    loading,
-    error,
-    signIn,
-    signUp,
-    logOut,
-  }
-}
+  const signUp = useCallback(async (email: string, password: string) => {
+    setError(null);
+    const auth = getFirebaseAuth();
+    await createUserWithEmailAndPassword(auth, email, password);
+  }, []);
+
+  const logOut = useCallback(async () => {
+    setError(null);
+    const auth = getFirebaseAuth();
+    await signOut(auth);
+  }, []);
+
+  return { user, loading, error, signIn, signUp, logOut };
+};
