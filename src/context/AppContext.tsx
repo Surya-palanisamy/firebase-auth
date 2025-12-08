@@ -1,25 +1,34 @@
 // src/context/AppContext.tsx
 "use client";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
-import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc, getDoc } from "firebase/firestore";
 import { getFirebaseDb } from "../firebase/client";
 import { useAuth } from "../hooks/useAuth";
-import { Droplet, Home, ShoppingBag } from "lucide-react";
-import { floodProneAreas, generateMockAlerts, tamilNaduDistricts } from "../services/mapService";
+import {
+  floodProneAreas,
+  generateMockAlerts,
+  tamilNaduDistricts,
+} from "../services/mapService";
 
-/* --- types (kept minimal — expand as needed) --- */
+/* ---------------- USER TYPE ---------------- */
 export interface User {
   id: string;
   name: string;
   email: string;
   role: string;
-  avatar?: string | null; // prefer base64 stored in Firestore (photoBase64) — we'll expose as avatar here
+  avatar?: string | null;
   phone?: string | null;
 }
 
-/* --- other domain types omitted for brevity in this snippet; keep as in your project --- */
+/* ---------------- ALERT TYPE ---------------- */
 export interface Alert {
   id: string;
   title: string;
@@ -33,37 +42,45 @@ export interface Alert {
   coordinates?: [number, number];
 }
 
+/* ---------------- CONTEXT TYPE ---------------- */
 interface AppContextType {
-  // ... add what you need. I'm exposing a subset here
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   alerts: Alert[];
   refreshData: () => Promise<void>;
-  // other actions...
+  logout: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user: authUser, loading: authLoading } = useAuth();
-  const [user, setUser] = useState<User | null>(null); // app-level user merged
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [mapAlerts, setMapAlerts] = useState<any[]>([]);
+/* ==========================================================
+                      PROVIDER
+   ========================================================== */
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const { user: authUser, loading: authLoading, logOut } = useAuth();
 
-  // load mock data (keep your previous mock generator)
+  const [user, setUser] = useState<User | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  /* ---------------- LOAD MOCK ALERTS ---------------- */
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      // mock map alerts
-      setMapAlerts(generateMockAlerts());
-      // create alerts from mapAlerts
-      const notificationAlerts: Alert[] = generateMockAlerts().map((a: any, i: number) => ({
+
+      const generated = generateMockAlerts();
+
+      const notifications: Alert[] = generated.map((a: any, i: number) => ({
         id: `A${String(i + 1).padStart(3, "0")}`,
         title: a.type,
         message: a.description,
-        type: a.severity === "Critical" ? "error" : a.severity === "High" ? "warning" : "info",
+        type:
+          a.severity === "Critical"
+            ? "error"
+            : a.severity === "High"
+            ? "warning"
+            : "info",
         timestamp: new Date().toISOString(),
         read: false,
         location: a.location,
@@ -71,17 +88,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         severity: a.severity,
         coordinates: a.coordinates,
       }));
-      setAlerts(notificationAlerts);
+
+      setAlerts(notifications);
       setIsLoading(false);
     };
+
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When authUser changes, merge Firestore profile (photoBase64, phone etc.) into app user
+  /* ---------------- SYNC FIREBASE AUTH USER INTO APP USER ---------------- */
   useEffect(() => {
-    const syncUser = async () => {
+    const sync = async () => {
       setIsLoading(true);
+
       try {
         if (!authUser) {
           setUser(null);
@@ -89,7 +108,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return;
         }
 
-        // If authUser already has photoBase64, it's already merged by useAuth - convert to app user
         const avatar = authUser.photoBase64 ?? authUser.photoURL ?? null;
 
         setUser({
@@ -101,20 +119,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           phone: authUser.phone ?? null,
         });
       } catch (err) {
-        console.error("AppContext syncUser error:", err);
-      } finally {
-        setIsLoading(false);
+        console.error("AppContext sync user error:", err);
       }
+
+      setIsLoading(false);
     };
-    void syncUser();
+
+    void sync();
   }, [authUser]);
 
-  // helper: save new firebase-auth user into Firestore (on signup)
-  const saveUserToFirestore = async (fbUser: FirebaseUser | null, extra: Partial<User> = {}) => {
+  /* ---------------- SAVE USER IN FIRESTORE (USED ON SIGNUP) ---------------- */
+  const saveUserToFirestore = async (
+    fbUser: FirebaseUser | null,
+    extra: Partial<User> = {}
+  ) => {
     if (!fbUser) return;
     try {
       const db = getFirebaseDb();
       const ref = doc(db, "users", fbUser.uid);
+
       await setDoc(
         ref,
         {
@@ -124,31 +147,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           photoBase64: extra.avatar ?? null,
           createdAt: serverTimestamp(),
         },
-        { merge: true },
+        { merge: true }
       );
     } catch (err) {
-      console.warn("saveUserToFirestore failed:", err);
+      console.warn("Failed to save user:", err);
     }
   };
 
+  /* ---------------- DATA REFRESH ---------------- */
   const refreshData = async () => {
-    // your real data refresh logic
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((res) => setTimeout(res, 700));
     setIsLoading(false);
   };
 
+  /* ---------------- LOGOUT FUNCTION ---------------- */
+  const logout = async () => {
+    try {
+      await logOut(); // firebase logout
+    } catch (err) {
+      console.warn("Logout error:", err);
+    }
+
+    setUser(null); // clear user context
+  };
+
+  /* ---------------- CONTEXT VALUE ---------------- */
   const value: AppContextType = {
     user,
     isAuthenticated: !!user,
     isLoading: isLoading || authLoading,
     alerts,
     refreshData,
+    logout,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
+/* ---------------- HOOK ---------------- */
 export const useAppContext = () => {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useAppContext must be used inside AppProvider");

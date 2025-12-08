@@ -38,7 +38,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isLoading, isAuthenticated } = useAppContext();
+  const { user, isLoading, isAuthenticated, logout } = useAppContext(); // <- include logout
 
   const [openGeneral, setOpenGeneral] = useState(true);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -47,14 +47,23 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const handleProfileMenuOpen = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
   const handleProfileMenuClose = () => setAnchorEl(null);
 
+  // Close menu first to avoid aria-hidden focus trap, then navigate/logout after a short delay
   const handleMenuSelect = (route: string) => {
     handleProfileMenuClose();
-    if (route === "/logout") {
-      // you may call logout from app context or auth hook
-      navigate("/login");
-      return;
-    }
-    navigate(route);
+
+    // small delay so menu fully unmounts and focus moves safely
+    setTimeout(() => {
+      if (route === "/logout") {
+        try {
+          if (logout) logout();
+        } catch (err) {
+          console.warn("Logout failed:", err);
+        }
+        navigate("/login");
+        return;
+      }
+      navigate(route);
+    }, 150);
   };
 
   const dashboards = [
@@ -76,7 +85,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       .toUpperCase() || "U";
 
   // PRIORITY: photoBase64 (from Firestore) -> auth photoURL -> fallback null
-  // We exposed Firestore photoBase64 into AppContext.user.avatar
   const avatarURL = user?.avatar ?? null;
 
   return (
@@ -114,7 +122,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <List
         subheader={
-          <ListSubheader disableSticky sx={{ mb: 1, color: theme.palette.text.secondary, fontSize: 11, fontWeight: 700 }}>
+          <ListSubheader
+            disableSticky
+            sx={{ mb: 1, color: theme.palette.text.secondary, fontSize: 11, fontWeight: 700 }}
+          >
             Overview
           </ListSubheader>
         }
@@ -156,12 +167,18 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <List
         subheader={
-          <ListSubheader disableSticky sx={{ mb: 1, mt: 0.5, color: theme.palette.text.secondary, fontSize: 11, fontWeight: 700 }}>
+          <ListSubheader
+            disableSticky
+            sx={{ mb: 1, mt: 0.5, color: theme.palette.text.secondary, fontSize: 11, fontWeight: 700 }}
+          >
             General
           </ListSubheader>
         }
       >
-        <ListItemButton onClick={() => setOpenGeneral((s) => !s)} sx={{ justifyContent: "space-between", px: 1.6, py: 1.1, borderRadius: 2 }}>
+        <ListItemButton
+          onClick={() => setOpenGeneral((s) => !s)}
+          sx={{ justifyContent: "space-between", px: 1.6, py: 1.1, borderRadius: 2 }}
+        >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
             <Box sx={{ width: 28, height: 28, borderRadius: "999px", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "rgba(99,102,241,0.12)" }}>
               <LifeBuoy size={16} />
@@ -175,7 +192,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           {general.map((item) => {
             const active = location.pathname === item.to;
             return (
-              <ListItemButton key={item.to} component={RouterLink as any} to={item.to} onClick={onNavigate} disableRipple sx={{ borderRadius: 2, ml: 1, width: "calc(100% - 8px)", mb: 0.5, height: 40, px: 1.6 }}>
+              <ListItemButton
+                key={item.to}
+                component={RouterLink as any}
+                to={item.to}
+                onClick={onNavigate}
+                disableRipple
+                sx={{ borderRadius: 2, ml: 1, width: "calc(100% - 8px)", mb: 0.5, height: 40, px: 1.6 }}
+              >
                 <ListItemIcon sx={{ minWidth: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <item.icon size={16} />
                 </ListItemIcon>
@@ -188,7 +212,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <Divider sx={{ my: 1 }} />
 
         {/* User panel */}
-        <Box onClick={handleProfileMenuOpen} sx={{ width: "100%", height: 56, p: 1, display: "flex", gap: 2, cursor: "pointer", alignItems: "center", borderRadius: 2 }}>
+        <Box
+          onClick={handleProfileMenuOpen}
+          sx={{ width: "100%", height: 56, p: 1, display: "flex", gap: 2, cursor: "pointer", alignItems: "center", borderRadius: 2 }}
+        >
           <Avatar
             src={avatarURL ?? undefined}
             sx={{
